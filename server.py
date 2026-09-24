@@ -9004,16 +9004,19 @@ function m3Gl(){
   const vs = `#version 300 es
 in vec3 aPos; in vec3 aNrm; in vec4 aCol; in vec2 aUv;
 uniform mat4 uProj; uniform mat4 uView;
-uniform int uSwing; uniform float uSide; uniform vec2 uHinge; uniform vec2 uCS; uniform float uOpen; uniform float uZo;
+uniform int uSwing; uniform float uSide; uniform vec2 uHinge; uniform vec2 uCS; uniform float uOpen; uniform float uZo; uniform float uLean;
 out vec3 vNrm; out vec4 vCol; out vec2 vUv;
 void main(){
   vec3 p = aPos, n = aNrm;
   // A book being read: a board (on the uSide side) swings round its hinge, uCS its angle's cosine and sine, and
-  // the spine sinks away under the book as it opens (uOpen). Nothing moves with uSwing 0.
+  // the spine sinks away under the book as it opens (uOpen). Nothing moves with uSwing 0. As the board stands up
+  // it looks larger the nearer it comes (uLean), as if seen from close by; the rest of the book stays as it is.
   if (uSwing == 3 || (uSwing == 1 && uSide * p.z > 0.0)) {
     float dx = p.x - uHinge.x, dz = p.z - uHinge.y;
     p.x = uHinge.x + dx * uCS.x - uSide * dz * uCS.y; p.z = uHinge.y + uSide * dx * uCS.y + dz * uCS.x;
     n = vec3(n.x * uCS.x - uSide * n.z * uCS.y, n.y, uSide * n.x * uCS.y + n.z * uCS.x);
+    float k = 1.0 + uLean * max(uSide * (p.z - uHinge.y), 0.0);
+    p.x = uHinge.x + (p.x - uHinge.x) * k; p.y *= k;
   } else if (uSwing == 2) p.z = mix(p.z, -uSide * uZo, uOpen);
   vNrm = mat3(uView) * n; vCol = aCol; vUv = aUv; gl_Position = uProj * uView * vec4(p, 1.0);
 }`;
@@ -9045,7 +9048,7 @@ void main(){
   gl.linkProgram(prog);
   if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) { M3.failed = true; return null; }
   M3.prog = prog;
-  M3.loc = Object.fromEntries(['uProj', 'uView', 'uBase', 'uTex', 'uHasTex', 'uCut', 'uLit', 'uBright', 'uSwing', 'uSide', 'uHinge', 'uCS', 'uOpen', 'uZo']
+  M3.loc = Object.fromEntries(['uProj', 'uView', 'uBase', 'uTex', 'uHasTex', 'uCut', 'uLit', 'uBright', 'uSwing', 'uSide', 'uHinge', 'uCS', 'uOpen', 'uZo', 'uLean']
     .map(u => [u, gl.getUniformLocation(prog, u)]));
   M3.gl = gl;
   return gl;
@@ -9904,8 +9907,9 @@ async function loadBookLook(model){
    simply opens. */
 const FL = {active:false, raf:0, hid:[], to:null, arrived:null, arrive:null, landed:false};
 const flEase = t => t * t * t * (t * (t * 6 - 15) + 10);   // smootherstep: starts and ends at rest
-// How far off the camera is from a book lying still in the reader: far enough that it looks as flat as the pages
-// drawn over it; and how near it comes while a cover stands up, so the cover is seen coming towards you.
+// How far off the camera is from a book in the reader: far enough that it looks as flat as the pages drawn over
+// it. A cover standing up is drawn as if seen from RD3_NEAR, so it's seen coming towards you; only the cover, as
+// from that close, the board underneath would look smaller than the pages lying on it.
 const RD3_FAR = 80, RD3_NEAR = 7;
 // The light a face turned straight at you gets. A book lying still in the reader is lit up by this much more, so
 // its faces look just as their photos and colours do, as the reader draws them.
@@ -10074,7 +10078,7 @@ function flyStop(){
 /* The book in the reader while it's closed, or while a cover swings: the journal's book model itself, drawn on
    the canvas over the reader (the one it flew up on), so the book you took up is the book you open. It lies
    facing you, seen from far off so it looks as flat as the pages. A cover swings round its hinge towards you,
-   the camera coming nearer as it stands up, and the pages the book opens at lie on the page block and on the
+   looking larger as it stands up and comes nearer, and the pages the book opens at lie on the page block and on the
    inside of the board. Closing at the back, the book is turned over and its back board swings the same way.
    Once it lies open, the reader's own drawing of the open book (drawn to the model's proportions, and lit the
    same) takes over, and the model fades away over it. */
@@ -10136,10 +10140,17 @@ function rd3Tex(gl, slot, key, entry, w, draw){
   rec.key = key; rec.entry = entry;
   return rec.tex;
 }
-// Page p as the reader draws it lying on the left (x 0) or the right (x RD.W).
-const rd3PageTex = (gl, slot, p, x) => rd3Tex(gl, slot, [p, x, RD.W].join(), RD.cache.get(p) || null, RD.W, c => { c.translate(-x, 0); rdPage(c, p, x); });
-// The edges beside a page, t wide, as the reader draws them on the left or the right.
-const rd3EdgeTex = (gl, slot, t, left) => rd3Tex(gl, slot, [t, left].join(), null, t, c => rdEdges(c, left ? t : 0, t, left));
+// Page p as the reader draws it lying on the left (x 0) or the right (x RD.W) of the book open at spread k, with
+// the page edges beside it where they lie over its place (e).
+const rd3PageTex = (gl, slot, p, x, k, e) => rd3Tex(gl, slot, [p, x, RD.W, k, e.t].join(), RD.cache.get(p) || null, RD.W, c => {
+  c.translate(-x, 0);
+  if (e.inn) rdEdges(c, x === 0 ? e.inn : 2 * RD.W - e.inn, e.t, x === 0);
+  rdSlotAt(c, p, x, k);
+});
+// The page edges in the board's margin (e.out wide), as the reader draws them on the left or the right.
+const rd3EdgeTex = (gl, slot, e, left) => rd3Tex(gl, slot, [e.t, e.out, left].join(), null, e.out, c => {
+  if (left) { c.translate(e.out, 0); rdEdges(c, e.inn, e.t, true); } else { c.translate(-2 * RD.W, 0); rdEdges(c, 2 * RD.W - e.inn, e.t, false); }
+});
 // Draws the book (closed, or with t, a cover swinging) and shows it. False when it can't be drawn this way.
 function rd3Draw(t){
   const d = RD.b3, m = RD.model && M3.cache.get(RD.model);
@@ -10155,7 +10166,7 @@ function rd3Draw(t){
     o = t.from < 0 || t.from > K ? t.p : 1 - t.p;
     open = back ? Math.min(t.from, t.to) : Math.max(t.from, t.to);
   }
-  const side = back ? -1 : 1, th = Math.PI * o, dist = 1 / (1 / RD3_FAR + (1 / RD3_NEAR - 1 / RD3_FAR) * Math.sin(th));
+  const side = back ? -1 : 1, th = Math.PI * o, dist = RD3_FAR;
   const st = $('readerStage').getBoundingClientRect();
   const x = st.left + RD.ox + RD.shift + RD.W, y = st.top + RD.oy + RD.H / 2, s = RD.H / (2 * d.py1);
   const turn = back ? [-1,0,0,0, 0,1,0,0, 0,0,-1,0, 0,0,0,1] : m4.id();
@@ -10163,7 +10174,7 @@ function rd3Draw(t){
   gl.uniformMatrix4fv(L.uView, false, m4.mul(m4.trs([back ? d.xl : -d.xl, 0, -d.zi - dist]), turn));
   gl.uniform1f(L.uBright, M3_REST_BRIGHT); gl.uniform1f(L.uSide, side);
   gl.uniform2f(L.uHinge, d.xl, side * d.zi); gl.uniform2f(L.uCS, Math.cos(th), Math.sin(th));
-  gl.uniform1f(L.uOpen, o); gl.uniform1f(L.uZo, d.zo);
+  gl.uniform1f(L.uOpen, o); gl.uniform1f(L.uZo, d.zo); gl.uniform1f(L.uLean, Math.sin(th) / RD3_NEAR);
   for (const p of m3Gpu(gl, m)) { gl.uniform1i(L.uSwing, RD3_BOARD.has(p.name) ? 1 : RD3_SPINE.has(p.name) ? 2 : 0); m3Part(gl, L, p); }
   if (o > 0 && open >= 0 && open <= K) {
     const q = RD.g3.quads[back ? 'back' : 'front'];
@@ -10171,9 +10182,9 @@ function rd3Draw(t){
     // Beside each, the edges of the pages under it, just as the reader draws them.
     for (const [slot, pg, left, swing] of [['board', back ? 2 * open + 1 : 2 * open, !back, 3], ['block', back ? 2 * open : 2 * open + 1, back, 0]]) {
       gl.uniform1i(L.uSwing, swing);
-      if (pg >= 1 && pg <= RD.n) m3Part(gl, L, Object.assign({}, q[slot], {tex:rd3PageTex(gl, slot, pg, left ? 0 : RD.W)}));
-      const t = rdStack(rdCount(left, open), open);
-      if (t) m3Part(gl, L, Object.assign({}, rd3Strip(gl, back, slot, t / s), {tex:rd3EdgeTex(gl, slot + 'Edge', t, left)}));
+      const e = rdEdgeSplit(left, open);
+      if (pg >= 1 && pg <= RD.n) m3Part(gl, L, Object.assign({}, q[slot], {tex:rd3PageTex(gl, slot, pg, left ? 0 : RD.W, open, e)}));
+      if (e.out) m3Part(gl, L, Object.assign({}, rd3Strip(gl, back, slot, e.out / s), {tex:rd3EdgeTex(gl, slot + 'Edge', e, left)}));
     }
   }
   gl.bindVertexArray(null); gl.uniform1i(L.uSwing, 0); gl.uniform1f(L.uBright, 0);
@@ -10380,16 +10391,29 @@ function rdPage(c, p, x){
   g.addColorStop(0, 'rgba(0,0,0,.2)'); g.addColorStop(.3, 'rgba(0,0,0,.06)'); g.addColorStop(1, 'rgba(0,0,0,0)');
   c.fillStyle = g; c.fillRect(x, 0, W, H);
 }
-const rdSlot = (c, p, x) => { if (p >= 1 && p <= RD.n) rdPage(c, p, x); };
+// Page p in its place, on the left (x 0) or the right (x RD.W) of the book open at spread k: narrower by the page
+// edges showing where its outer edge would be (rdEdgeSplit), drawn in towards the spine.
+function rdSlotAt(c, p, x, k){
+  if (p < 1 || p > RD.n) return;
+  const W = RD.W, inn = rdEdgeSplit(x === 0, k).inn;
+  if (!inn) { rdPage(c, p, x); return; }
+  c.save(); c.translate(W, 0); c.scale((W - inn) / W, 1); c.translate(-W, 0); rdPage(c, p, x); c.restore();
+}
+const rdSlot = (c, p, x) => rdSlotAt(c, p, x, RD.spread);
 // How thick the edges of the pages on one side look: in a book, its thickness shared out by pages.
-/* The edges of the pages on one side of the book open at spread k, seen beside the pages: count pages' worth, lying
-   in the margin where the board reaches past them (the board itself is always the same size). How much of them
-   shows depends on where in the book it's open: most in the middle, where the pages fan up from the spine on
-   both sides, and barely any at the start and the end, where they lie flat. */
+/* The edges of the pages on one side of the book open at spread k, seen beside the pages: count pages' worth. How
+   much of them shows depends on where in the book it's open: most in the middle, where the pages fan up from the
+   spine on both sides, and barely any at the start and the end, where they lie flat. The board is always the same
+   size and always reaches past them: they lie first in its margin (out of them), and the rest (inn) where the top
+   page's outer edge would be, that page being drawn that much narrower, as it looks curving up from the spine. */
 function rdStack(count, k){
   if (!count || !RD.n) return 0;
-  const f = Math.min(1, Math.max(0, 2 * k / RD.n)), most = rdMargin() * 0.8 * (RD.look ? Math.min(1, 0.3 + RD.look.thick * 3) : 1);
+  const f = Math.min(1, Math.max(0, 2 * k / RD.n)), most = RD.W * (RD.look ? Math.min(0.08, 0.02 + RD.look.thick * 0.3) : 0.035);
   return Math.max(1, most * Math.sin(Math.PI * f) * Math.min(1, 2 * count / RD.n));
+}
+function rdEdgeSplit(left, k){
+  const t = rdStack(rdCount(left, k), k), out = Math.min(t, rdMargin() * 0.8);
+  return {t, out, inn:t - out};
 }
 // The page edges, t wide, beside a page whose outer edge is at x0 (outwards to the left, for the left page).
 function rdEdges(c, x0, t, left){
@@ -10414,7 +10438,7 @@ const rdCount = (left, k) => left ? 2 * k : Math.max(0, RD.n - 2 * k);
 // shows it (rd3Draw), so the one can take over from the other unseen.
 function rdHalf(c, side, k, page){
   const W = RD.W, H = RD.H, b = rdMargin(), left = side === 'L', look = RD.look, model = !!RD.b3;
-  const t = rdStack(rdCount(left, k), k), x = left ? -b : W, w = W + b;
+  const e = rdEdgeSplit(left, k), x = left ? -b : W, w = W + b;
   c.save();
   c.beginPath(); c.roundRect(x, -b, w, H + 2 * b, model ? 0 : left ? [b * 0.5, 0, 0, b * 0.5] : [0, b * 0.5, b * 0.5, 0]); c.clip();
   rdFill(c, look && (left ? look.insideL : look.insideR), x, -b, w, H + 2 * b, READER_BOARD);
@@ -10425,7 +10449,7 @@ function rdHalf(c, side, k, page){
     c.fillStyle = sg; c.fillRect(x, -b, w, H + 2 * b);
   }
   c.restore();
-  if (t) rdEdges(c, left ? 0 : 2 * W, t, left);
+  if (e.t) rdEdges(c, left ? e.inn : 2 * W - e.inn, e.t, left);
   if (page) rdSlot(c, left ? 2 * k : 2 * k + 1, left ? 0 : W);
 }
 /* The faces of a board, for a cover turning or lying closed, drawn onto a canvas the size of the board:
