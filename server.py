@@ -74,14 +74,15 @@ with the arrow keys; Home and End go to the start and the end). It opens where y
 it.
 Books: drag a PDF from the writing onto a book model on the right and the two become one book:
 the model shows "Read", and reading it takes the book up: it floats from where it is to right in
-front of you, turning to show its front cover, and the model's own cover swings open to where you
-left off (and it's the model again whenever the book is closed, at the front or the back). The
+front of you, turning to show its front cover, and the model's own cover swings open, and the pages
+are leafed through to where you left off (and it's the model again whenever the book is closed, at the front or the back). The
 boards, the insides of the boards and the page edges are those of the model (its photos, or its
 colours), and the pages take the shape of its page block. The PDF's first page is left out (the
 model is the book's cover now), and pages are numbered as the PDF numbers them. A book with
 endpapers opens at them: the endpaper pasted inside the board, and the free endpaper opposite,
 whose plain back comes before the first page (and the same at the end). Closing it (Close, or
-Escape) shuts the cover and floats the book back to where it was taken from. Turned back past the
+Escape) shuts the nearer cover (the front one in the first half of the book, the back one past
+the middle) and floats the book back to where it was taken from. Turned back past the
 first page, or on past the last, the book closes again. The model's Open view can take the PDF
 out again (the PDF itself stays where it is). The pages are drawn by pdf.js (from Mozilla, the same that draws PDFs in Firefox), which
 the journal downloads once from the npm registry into journal/pdfjs and checks against its
@@ -9865,7 +9866,7 @@ $('pdfView').addEventListener('close', () => {
    the last, its back cover closes over. A cover doesn't bend: it swings round the spine, its far edge coming
    nearer (so larger) as it stands up. The open book is then "spread" 0 to K; closed at the front it's -1, and
    closed at the back K + 1. */
-const RD = {doc:null, task:null, name:'', model:null, look:null, n:0, spread:0, target:null, aspect:0.7, W:0, H:0, ox:0, oy:0, dpr:1,
+const RD = {doc:null, task:null, name:'', model:null, look:null, n:0, spread:0, target:null, keep:new Set(), aspect:0.7, W:0, H:0, ox:0, oy:0, dpr:1,
   shift:0, cache:new Map(), queue:[], busy:false, gen:0, pgen:0, turn:null, raf:0, open:false, faceA:null, faceB:null,
   b3:null, g3:null, v3:false, v3At:0, v3Timer:0,
   skip:0, pdfN:0, ends:false};   // the PDF's pages left out at the start (a book's cover), how many are read, and endpaper leaves (rdSrc)   // the book's model, drawn in 3D while it's closed or a cover swings (rd3Draw)
@@ -10157,11 +10158,12 @@ async function closeBook(){
   const gen = RD.gen, K = lastSpread();
   try {
     // Shut: a cover on its way open goes back the way it came; one on its way shut carries on; and from an open
-    // spread (or a page being turned), the front cover swings closed over it.
+    // spread (or a page being turned), the cover nearer it swings closed over it: the front one in the first half
+    // of the book, the back one past the middle.
     if (RD.b3 && RD.look) {
       const t = RD.turn;
       if (t && t.kind === 'rigid') { if (t.to >= 0 && t.to <= K) rdAnimate(t, 'back'); }
-      else if (RD.spread >= 0 && RD.spread <= K) { RD.turn = null; rdRigid(RD.spread, -1, 'turn'); }
+      else if (RD.spread >= 0 && RD.spread <= K) { RD.turn = null; rdRigid(RD.spread, 2 * RD.spread > K ? K + 1 : -1, 'turn'); }
       while (gen === RD.gen && RD.turn) await new Promise(r => setTimeout(r, 30));
     }
     if (gen !== RD.gen) return;
@@ -10371,11 +10373,13 @@ async function openReader(name, title, model, lift){
   if (lift) flyBook(lift);
   drawReader();
   try {
-    readerSay(pdfjsLib ? 'Opening the book\u2026' : 'Getting the page reader ready (the first time, this downloads it)\u2026');
+    // (only if that's slow: the first time, it's downloaded)
+    readerSay('');
+    if (!pdfjsLib) setTimeout(() => { if (gen === RD.gen && !pdfjsLib) readerSay('Getting the page reader ready (the first time, this downloads it)\u2026'); }, 800);
     const look = model ? loadBookLook(model).catch(() => null) : Promise.resolve(null);
     const lib = await loadPdfjs();
     if (gen !== RD.gen) return;
-    readerSay('Opening the book\u2026');
+    readerSay('');
     const task = lib.getDocument({url:pdfSrc(name), cMapUrl:'/pdfjs/cmaps/', cMapPacked:true,
       standardFontDataUrl:'/pdfjs/standard_fonts/', wasmUrl:'/pdfjs/wasm/', iccUrl:'/pdfjs/iccs/'});
     RD.task = task;
@@ -10394,14 +10398,23 @@ async function openReader(name, title, model, lift){
     readerSay('');
     $('readerGo').disabled = false; $('readerGo').min = RD.skip + 1; $('readerGo').max = RD.skip + RD.pdfN;
     if (RD.look) {
-      // Closed at first; once the pages it opens at are drawn (or after a moment), the cover swings open.
-      RD.spread = -1; RD.target = saved;
+      // Closed at first; once the pages it opens at are drawn (or after a moment), the cover swings open, at the
+      // start, and then it's leafed through to where it was left (the pages it stops at on the way drawn first).
+      const calm = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+      const path = calm ? [] : rdFlickPath(saved), first = path.length ? 0 : saved;
+      RD.spread = -1; RD.target = first;
+      for (const j of path) RD.keep.add(2 * j).add(2 * j + 1);
       RD.W = 0; readerLayout(); readerPagesText(); drawReader();
-      const at = [2 * saved, 2 * saved + 1].filter(p => p >= 1 && p <= RD.n), t0 = performance.now();
+      const at = [first, ...path].flatMap(j => [2 * j, 2 * j + 1]).filter(p => p >= 1 && p <= RD.n), t0 = performance.now();
       while (gen === RD.gen && performance.now() - t0 < 1500 && !at.every(rdReady)) await new Promise(r => setTimeout(r, 60));
       await flyLand(gen);
       await new Promise(r => setTimeout(r, 250));
-      if (gen === RD.gen && RD.spread === -1 && !RD.turn && !FL.leaving && !FL.active) rdRigid(-1, saved, 'turn');
+      if (gen === RD.gen && RD.spread === -1 && !RD.turn && !FL.leaving && !FL.active) {
+        rdRigid(-1, first, 'turn');
+        while (gen === RD.gen && RD.turn && RD.turn.kind === 'rigid') await new Promise(r => setTimeout(r, 30));
+        if (gen === RD.gen && RD.spread === first) await rdFlick(path, gen);
+      }
+      RD.keep.clear();
     } else {
       RD.spread = saved;
       RD.W = 0; readerLayout(); readerPagesText(); drawReader();
@@ -10421,7 +10434,7 @@ function closeReaderDoc(){
   RD.b3 = null; RD.v3 = false; clearTimeout(RD.v3Timer);
   RD.gen++; RD.pgen++;
   if (RD.task) RD.task.destroy().catch(() => {});
-  RD.task = RD.doc = RD.look = RD.model = RD.target = null; RD.n = RD.skip = RD.pdfN = 0; RD.ends = false; RD.cache.clear(); RD.queue = []; RD.turn = null; RD.open = false;
+  RD.task = RD.doc = RD.look = RD.model = RD.target = null; RD.n = RD.skip = RD.pdfN = 0; RD.ends = false; RD.cache.clear(); RD.keep.clear(); RD.queue = []; RD.turn = null; RD.open = false;
   if (RD.raf) { cancelAnimationFrame(RD.raf); RD.raf = 0; }
 }
 // The book as large as fits, and the canvas at the screen's own sharpness.
@@ -10473,9 +10486,10 @@ function rdJump(page){
 function readerWant(){
   if (!RD.doc) return;
   const k = Math.max(0, Math.min(lastSpread(), RD.target !== null ? RD.target : RD.spread)), at = 2 * k + 1;
-  RD.queue = [at, at - 1, at + 1, at + 2, at - 2, at - 3, at + 3, at + 4, at - 4, at - 5]
-    .filter(p => p >= 1 && p <= RD.n && rdSrc(p).pdf && (RD.cache.get(p) || {}).pgen !== RD.pgen);
-  for (const p of [...RD.cache.keys()]) if (Math.abs(p - at) > 12) RD.cache.delete(p);
+  // (and, after the open ones, those it's about to be leafed through to: RD.keep)
+  const want = p => p >= 1 && p <= RD.n && rdSrc(p).pdf && (RD.cache.get(p) || {}).pgen !== RD.pgen;
+  RD.queue = [...new Set([at, at - 1, ...RD.keep, at + 1, at + 2, at - 2, at - 3, at + 3, at + 4, at - 4, at - 5])].filter(want);
+  for (const p of [...RD.cache.keys()]) if (Math.abs(p - at) > 12 && !RD.keep.has(p)) RD.cache.delete(p);
   readerPump();
 }
 async function readerPump(){
@@ -10664,14 +10678,15 @@ function drawReader(){
     return;
   }
   // A leaf being turned that's the last on its side takes the edges of the pages with it: none are left there.
-  const last = t && t.kind === 'curl' ? (t.dir > 0 ? RD.n - 2 * k <= 2 : 2 * k <= 2) : false;
+  const step = t && t.kind === 'curl' && t.step || 1;   // (leafing through, a turn can go over several leaves at once)
+  const last = t && t.kind === 'curl' ? (t.dir > 0 ? RD.n - 2 * (k + step) <= 0 : 2 * (k - step) <= 0) : false;
   rdHalf(c, 'L', k, false, last && t.dir < 0 ? 0 : undefined); rdHalf(c, 'R', k, false, last && t.dir > 0 ? 0 : undefined);
   const L = 2 * k, R = 2 * k + 1;
   const len = t ? Math.hypot(t.P.x - t.C.x, t.P.y - t.C.y) : 0;
   if (!t || len < 0.5) { rdSlot(c, L, 0); rdSlot(c, R, W); return; }
   // Turning forward, the right page goes over to the left; back, the left page comes over to the right.
   const dir = t.dir, x0 = dir > 0 ? W : 0, xo = dir > 0 ? 0 : W;
-  const front = dir > 0 ? R : L, back = front + dir, under = front + 2 * dir;
+  const front = dir > 0 ? R : L, back = front + dir * (2 * step - 1), under = front + 2 * step * dir;
   rdSlot(c, dir > 0 ? L : R, xo);
   const C = t.C, P = t.P, M = {x:(C.x + P.x) / 2, y:(C.y + P.y) / 2}, n = {x:(P.x - C.x) / len, y:(P.y - C.y) / len};
   const side = s => (s.x - M.x) * n.x + (s.y - M.y) * n.y;   // below 0 on the corner's side of the fold
@@ -10773,7 +10788,7 @@ const newTurn = (dir, cy) => { const C = cornerOf(dir, cy); return {kind:'curl',
 const ease = u => u < .5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2;
 function rdFinish(t){
   if (t.kind === 'rigid') rdGoTo(t.anim && t.anim.done === 'back' ? t.from : t.to);
-  else rdGoTo(RD.spread + t.dir);
+  else rdGoTo(RD.spread + t.dir * (t.step || 1));
 }
 function rdTick(now){
   RD.raf = 0;
@@ -10810,7 +10825,7 @@ function rdAnimate(t, done){
   } else {
     const to = over ? {x:t.dir > 0 ? 0 : 2 * RD.W, y:t.cy} : t.C;
     const far = Math.hypot(to.x - t.P.x, to.y - t.P.y) / (2 * RD.W);
-    t.anim = {from:{x:t.P.x, y:t.P.y}, to, t0:performance.now(), dur:Math.max(160, (over ? 620 : 380) * Math.min(1, far * 1.2)),
+    t.anim = {from:{x:t.P.x, y:t.P.y}, to, t0:performance.now(), dur:t.fast || Math.max(160, (over ? 620 : 380) * Math.min(1, far * 1.2)),
       lift:(t.cy > RD.H / 2 ? -1 : 1) * RD.H * (over ? 0.16 : 0.03), done};
   }
   RD.turn = t; rdKick();
@@ -10821,6 +10836,31 @@ function rdRigid(from, to, done){
   if (to >= 0 && to <= lastSpread()) RD.target = to;
   readerWant();
   rdAnimate(t, done);
+}
+/* Leafing through to where the book was left, once its cover is open: a few quick turns, the first pages one at a
+   time and then several leaves at a time, however far in that is. Taking hold of it (or closing it) stops it. */
+function rdFlickPath(to){
+  const n = Math.min(to, 8), path = [];
+  for (let i = 1; i <= n; i++) { const j = Math.round(to * Math.pow(i / n, 1.6)); if (j > (path[path.length - 1] || 0)) path.push(j); }
+  return path;
+}
+async function rdFlick(path, gen){
+  const wait = ms => new Promise(r => setTimeout(r, ms));
+  for (const [i, j] of path.entries()) {
+    const from = RD.spread, going = () => gen === RD.gen && !FL.leaving && RD.spread === from;
+    if (RD.turn && RD.turn.mode === 'peek') RD.turn = null;   // the pointer only resting near a corner
+    if (!going() || RD.turn || j <= from) return;
+    RD.target = j; readerWant();
+    const t0 = performance.now();
+    while (going() && !RD.turn && performance.now() - t0 < 600 && ![2 * j, 2 * j + 1].every(p => p < 1 || p > RD.n || rdReady(p))) await wait(40);
+    if (RD.turn && RD.turn.mode === 'peek') RD.turn = null;
+    if (!going() || RD.turn) return;
+    const t = newTurn(1, RD.H);
+    t.step = j - from; t.fast = path.length < 3 ? 520 : i === 0 || i === path.length - 1 ? 420 : 300;
+    rdAnimate(t, 'turn');
+    while (gen === RD.gen && RD.turn === t) await wait(30);
+    if (RD.spread !== j) return;
+  }
 }
 // A turn already on its way is finished at once.
 function rdSettle(){
