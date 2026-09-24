@@ -10130,6 +10130,9 @@ function flyBackFrom(lift, to, t, ms, gen){
 async function closeBook(){
   const dlg = $('bookReader');
   if (FL.leaving) return;
+  // The model comes back in the same moment as the reader (and the book flying in it) goes: its 'close' event
+  // comes a little after, and a frame could be shown between, with the book nowhere.
+  const shut = () => { flyStop(); if (dlg.open) dlg.close(); };
   // Closed while it's still on its way up: it goes back from where it's got to.
   if (FL.active && !FL.landed && FL.lift && FL.to) {
     const gen = RD.gen, lift = FL.lift, to = FL.to, t = FL.t;
@@ -10144,12 +10147,12 @@ async function closeBook(){
       }
     } catch (e) {}
     try { await flyBackFrom(lift, to, t, FL.ms || 900, gen); }
-    finally { if (dlg.open) dlg.close(); FL.leaving = false; dlg.classList.remove('leaving'); }
+    finally { shut(); FL.leaving = false; dlg.classList.remove('leaving'); }
     return;
   }
   const lift0 = FL.lift, name = lift0 && lift0.name;
   const target = name && [lift0.from, ...FL.hid].find(c => c && c.isConnected && c.getBoundingClientRect().width > 3);
-  if (!target || FL.active || !RD.doc) { dlg.close(); return; }
+  if (!target || FL.active || !RD.doc) { shut(); return; }
   FL.leaving = true;
   const gen = RD.gen, K = lastSpread();
   try {
@@ -10163,9 +10166,9 @@ async function closeBook(){
     }
     if (gen !== RD.gen) return;
     const lift = bookLift(name, target), back = RD.spread > K;
-    if (!lift) { dlg.close(); return; }
+    if (!lift) return;
     const to = RD.b3 && RD.look ? rd3Pose(back) : FL.to;
-    if (!to) { dlg.close(); return; }
+    if (!to) return;
     FL.active = true; FL.landed = false;   // the reader stops drawing the book; the flight has it now
     const cv = $('readerFlight');
     const fresh = cv.hidden;
@@ -10178,7 +10181,7 @@ async function closeBook(){
     await flyBackFrom(lift, to, 1, Math.max(750, Math.min(1100, 650 + far * 0.35)), gen);
   } finally {
     // closed first: let go of the lightening before, and the room would be dark again for a moment
-    if (dlg.open) dlg.close();
+    shut();
     FL.leaving = false; dlg.classList.remove('leaving');
   }
 }
