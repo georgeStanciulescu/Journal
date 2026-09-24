@@ -73,9 +73,10 @@ side by side on their boards, turned by dragging a page's corner (or by clicking
 with the arrow keys; Home and End go to the start and the end). It opens where you last left
 it.
 Books: drag a PDF from the writing onto a book model on the right and the two become one book:
-the model shows "Read", and reading it opens on its closed front cover, which swings open to
-where you left off. The boards, the insides of the boards and the page edges are those of the
-model (its photos, or its colours), and the pages take the book's shape. Turned back past the
+the model shows "Read", and reading it takes the book up: it floats from where it is to right in
+front of you, turning to show its front cover, and the cover swings open to where you left off.
+The boards, the insides of the boards and the page edges are those of the model (its photos, or
+its colours), and the pages take the book's shape. Turned back past the
 first page, or on past the last, the book closes again. The model's Open view can take the PDF
 out again (the PDF itself stays where it is). The pages are drawn by pdf.js (from Mozilla, the same that draws PDFs in Firefox), which
 the journal downloads once from the npm registry into journal/pdfjs and checks against its
@@ -4053,6 +4054,16 @@ body.moving iframe,body.holding iframe{pointer-events:none}
 #bookReader{border:0;padding:0;margin:0;background:transparent;width:100vw;height:100vh;max-width:none;max-height:none;overflow:hidden}
 #bookReader[open]{display:flex;flex-direction:column}
 #bookReader::backdrop{background:rgba(10,12,11,.92)}
+/* Taking a book up to read it: the model floats in front of you, and fades away over the reader's book as it lands */
+.reader-flight{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:2;transition:opacity .3s ease}
+.reader-flight[hidden]{display:none}
+.reader-flight.landing{opacity:0}
+#bookReader.flying #readerCanvas{opacity:0;pointer-events:none}
+#bookReader.flying .reader-note{align-items:flex-end;padding-bottom:10px}
+#bookReader.flying::backdrop{animation:readerDim .8s ease both}
+#bookReader.flying .reader-bar{animation:readerBarIn .5s ease .45s both}
+@keyframes readerDim{from{background:rgba(10,12,11,0)}}
+@keyframes readerBarIn{from{opacity:0}}
 .reader-stage{position:relative;flex:1;min-height:0}
 #readerCanvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none;outline:none}
 .reader-note{position:absolute;inset:0;margin:0;display:flex;align-items:center;justify-content:center;padding:24px;text-align:center;
@@ -4704,6 +4715,7 @@ body:not(.can-bring-back) .arch-model-add{display:none}
     <canvas id="readerCanvas" tabindex="0" aria-label="The open book. Drag a page's corner to turn it, click a page, or use the arrow keys"></canvas>
     <p class="reader-note" id="readerNote" hidden></p>
   </div>
+  <canvas class="reader-flight" id="readerFlight" aria-hidden="true" hidden></canvas>
   <div class="viewer-bar reader-bar">
     <span class="reader-title" id="readerTitle"></span>
     <span class="model-help reader-help">Drag a corner, click a page, or use the arrow keys</span>
@@ -9204,7 +9216,7 @@ function shelfModelItem(ref){
     tag.textContent = title; tag.title = title + ' (a book: Read opens it)\nDrag here to move it to another place';
     const read = document.createElement('button'); read.type = 'button'; read.className = 'side-read-btn';
     read.textContent = 'Read'; read.title = 'Open the book and read it';
-    read.addEventListener('click', () => readBook(name));
+    read.addEventListener('click', () => readBook(name, canvas));
     bar.querySelector('.side-open-btn').before(read);
     item.classList.add('shelf-book'); item.setAttribute('aria-label', 'Book: ' + title);
   }
@@ -9263,7 +9275,7 @@ function openModelView(name){
   canvas.focus({preventScroll:true});
 }
 $('modelClose').addEventListener('click', () => $('modelViewer').close());
-$('modelRead').addEventListener('click', () => { if (bigModel) readBook(bigModel.name); });
+$('modelRead').addEventListener('click', () => { if (bigModel) readBook(bigModel.name, bigModel.canvas); });
 $('modelUnbind').addEventListener('click', () => { if (bigModel) { unbindBook(bigModel.name); $('modelRead').hidden = $('modelUnbind').hidden = true; } });
 $('modelArchive').addEventListener('click', async () => {
   if (!bigModel) return;
@@ -9824,9 +9836,10 @@ function unbindBook(model){
   e.books = Object.assign({}, e.books); delete e.books[model];
   markChanged(currentId); renderShelf();
 }
-function readBook(model){
+// from: the canvas the model is showing in, for the book to be taken up from there.
+function readBook(model, from){
   const e = entries.get(currentId), pdf = bookPdf(e, model);
-  if (pdf) openReader(pdf, pdfTitleIn(e.body, pdf) || 'Book', model);
+  if (pdf) openReader(pdf, pdfTitleIn(e.body, pdf) || 'Book', model, from ? bookLift(model, from) : null);
 }
 const modelUnder = (x, y) => { const el = document.elementFromPoint(x, y); return el && el.closest ? el.closest('#shelfPics > .shelf-model') : null; };
 function markBindTarget(item){
@@ -9865,18 +9878,138 @@ async function loadBookLook(model){
     insideL:insideL || endpaper || board, insideR:insideR || endpaper || board, board, edges};
 }
 
+/* Taking a book up to read it. The model itself (drawn by the shared WebGL canvas, over the whole screen) floats
+   from where it was, on the right or open large, to just in front of you: it rises a little as it comes, grows
+   as it nears, and turns to face you with its front cover. It arrives exactly where the reader shows the closed
+   book, hovers there until the reader is ready, then fades into it, and the cover swings open. Where the model
+   was, it's gone until the book is closed again. With reduced motion asked for, the reader simply opens. */
+const FL = {active:false, raf:0, hid:[], arrived:null, arrive:null, landed:false};
+const flEase = t => t * t * t * (t * (t * 6 - 15) + 10);   // smootherstep: starts and ends at rest
+function bookLift(name, from){
+  const m = M3.cache.get(name);
+  if (!m || !m.data || !from.isConnected || !m3Gl()) return null;
+  if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return null;
+  const r = from.getBoundingClientRect();
+  if (r.width < 4 || r.height < 4 || r.bottom < 0 || r.top > innerHeight || r.right < 0 || r.left > innerWidth) return null;
+  // The model's extent: a journal book model is its front cover facing +z, 2hy tall and 2hx wide.
+  let hx = 0, hy = 0, hz = 0;
+  for (const p of m.data) for (let k = 0; k < p.pos.length; k += 3) {
+    hx = Math.max(hx, Math.abs(p.pos[k])); hy = Math.max(hy, Math.abs(p.pos[k + 1])); hz = Math.max(hz, Math.abs(p.pos[k + 2]));
+  }
+  if (!(hy > 0.01)) return null;
+  const s = m3State(name), aspect = r.width / r.height;
+  const half = Math.min(M3_FOV / 2, Math.atan(Math.tan(M3_FOV / 2) * aspect));
+  return {name, from, hx, hy, hz, aspect, rect:{left:r.left, top:r.top, width:r.width, height:r.height},
+    x:r.left + r.width / 2, y:r.top + r.height / 2, h:r.height, dist:1.06 / Math.sin(half) / s.zoom,
+    yaw:Math.atan2(Math.sin(s.yaw), Math.cos(s.yaw)), pitch:s.pitch, panX:s.panX, panY:s.panY};
+}
+function flyBook(lift){
+  const st = $('readerStage').getBoundingClientRect(), sw = st.width, sh = st.height;
+  if (!sw || !sh) { $('bookReader').classList.remove('flying'); return; }
+  // Where the reader will show the closed book: its boards (page height plus a margin each side), in the middle.
+  const H = readerFit(sw, sh, Math.min(2, Math.max(0.25, lift.hx / lift.hy)));
+  const px = H + 2 * Math.max(8, H * 0.024), dist = Math.max(lift.dist, 2.2);
+  const to = {x:st.left + sw / 2, y:st.top + sh / 2, dist, h:px * Math.tan(M3_FOV / 2) * (dist - lift.hz) / lift.hy};
+  const far = Math.hypot(to.x - lift.x, to.y - lift.y), ms = Math.max(750, Math.min(1100, 650 + far * 0.35));
+  // Every view of it goes (on the right as well as the large view it may have come from): the book is in your hands.
+  const hid = [lift.from, ...[...M3.views].filter(v => v.name === lift.name && v.canvas !== lift.from).map(v => v.canvas)];
+  Object.assign(FL, {active:true, hid, landed:false, arrived:new Promise(r => FL.arrive = r)});
+  for (const c of hid) c.style.visibility = 'hidden';
+  const cv = $('readerFlight'); cv.hidden = false; cv.classList.remove('landing');
+  const t0 = performance.now();
+  const step = now => {
+    FL.raf = 0;
+    if (!FL.active) return;
+    const t = Math.min(1, (now - t0) / ms);
+    flyFrame(lift, to, t, t < 1 ? 0 : now - t0 - ms);
+    if (t >= 1 && FL.arrive) { FL.arrive(); FL.arrive = null; }
+    if (!FL.landed) FL.raf = requestAnimationFrame(step);
+  };
+  FL.raf = requestAnimationFrame(step);
+}
+// One frame of the flight, t going 0 to 1; after that, wait is how long it has hovered.
+function flyFrame(a, b, t, wait){
+  const gl = m3Gl(), m = M3.cache.get(a.name), cv = $('readerFlight');
+  if (!gl || !m || !m.data) return;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2), SW = innerWidth, SH = innerHeight;
+  const W = Math.max(1, Math.round(SW * dpr)), H = Math.max(1, Math.round(SH * dpr));
+  if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
+  const g = M3.canvas; if (g.width !== W || g.height !== H) { g.width = W; g.height = H; }
+  const lerp = (x, y, k) => x + (y - x) * k;
+  // It moves and grows together; it turns a little behind, so it's seen coming round as it rises.
+  const e = flEase(t), er = flEase(Math.min(1, Math.max(0, (t - 0.08) / 0.84)));
+  const lift = Math.min(70, 0.14 * Math.hypot(b.x - a.x, b.y - a.y)) * Math.sin(Math.PI * e);
+  const bob = wait > 0 ? Math.sin(wait / 520) * 2 * Math.min(1, wait / 400) : 0;   // hovering while the pages get ready
+  const x = lerp(a.x, b.x, e), y = lerp(a.y, b.y, e) - lift + bob, h = Math.exp(lerp(Math.log(a.h), Math.log(b.h), e));
+  const dist = lerp(a.dist, b.dist, e), yaw = lerp(a.yaw, 0, er), pitch = lerp(a.pitch, 0, er);
+  const panX = lerp(a.panX, 0, e), panY = lerp(a.panY, 0, e);
+  // Drawn as it would be in a box h tall (the shape of the one it came from) centred at x, y: the box's own
+  // projection, then moved and scaled to that place on the whole screen.
+  const place = [h * a.aspect / SW,0,0,0, 0,h / SH,0,0, 0,0,1,0, 2 * x / SW - 1,1 - 2 * y / SH,0,1];
+  const proj = m4.mul(place, m4.perspective(M3_FOV, a.aspect, Math.max(0.01, dist - 1.5 - Math.hypot(panX, panY)), dist + 3));
+  const cy = Math.cos(yaw), sy = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch);
+  const rotY = [cy,0,-sy,0, 0,1,0,0, sy,0,cy,0, 0,0,0,1], rotX = [1,0,0,0, 0,cp,sp,0, 0,-sp,cp,0, 0,0,0,1];
+  const view = m4.mul(m4.trs([panX, panY, -dist]), m4.mul(rotX, rotY));
+  gl.viewport(0, 0, W, H);
+  gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  gl.enable(gl.DEPTH_TEST); gl.disable(gl.CULL_FACE); gl.disable(gl.BLEND);
+  gl.useProgram(M3.prog);
+  const L = M3.loc;
+  gl.uniformMatrix4fv(L.uProj, false, proj); gl.uniformMatrix4fv(L.uView, false, view); gl.uniform1i(L.uTex, 0);
+  for (const p of m3Gpu(gl, m)) {
+    gl.uniform4fv(L.uBase, p.base); gl.uniform1f(L.uCut, p.cut); gl.uniform1i(L.uLit, p.lit ? 1 : 0);
+    gl.uniform1i(L.uHasTex, p.tex ? 1 : 0);
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, p.tex);
+    gl.bindVertexArray(p.vao);
+    gl.drawElements(gl.TRIANGLES, p.count, gl.UNSIGNED_INT, 0);
+  }
+  gl.bindVertexArray(null);
+  // At first it's still inside the box it was in (cut off where that was, if it was zoomed in); the box
+  // opens out as it leaves.
+  const c = cv.getContext('2d'), k = flEase(Math.min(1, t / 0.4)), r = a.rect;
+  const l = lerp(r.left, 0, k), tp = lerp(r.top, 0, k), rw = lerp(r.left + r.width, SW, k), bt = lerp(r.top + r.height, SH, k);
+  c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, W, H);
+  c.save(); c.beginPath(); c.rect(l * dpr, tp * dpr, (rw - l) * dpr, (bt - tp) * dpr); c.clip();
+  c.drawImage(g, 0, 0); c.restore();
+}
+// Once it has arrived and the reader has drawn the book under it, the model fades into the reader's book.
+async function flyLand(gen){
+  if (!FL.active) return;
+  await FL.arrived;
+  if (gen !== RD.gen || !FL.active || FL.landed) return;
+  FL.landed = true;
+  if (FL.raf) { cancelAnimationFrame(FL.raf); FL.raf = 0; }
+  $('bookReader').classList.remove('flying'); $('readerFlight').classList.add('landing');
+  await new Promise(r => setTimeout(r, 320));
+  if (gen === RD.gen) flyEnd();
+}
+function flyEnd(){
+  FL.active = false;
+  if (FL.raf) { cancelAnimationFrame(FL.raf); FL.raf = 0; }
+  if (FL.arrive) { FL.arrive(); FL.arrive = null; }
+  const cv = $('readerFlight'); cv.hidden = true; cv.classList.remove('landing');
+  $('bookReader').classList.remove('flying');
+}
+// Closing the book puts the model back where it was.
+function flyStop(){
+  flyEnd();
+  for (const c of FL.hid) c.style.visibility = '';
+  FL.hid = [];
+}
 function readerSay(text){ const n = $('readerNote'); n.textContent = text || ''; n.hidden = !text; }
 const readerKey = name => 'journal-reader:' + name;
 const lastSpread = () => Math.floor(RD.n / 2);
 const firstState = () => RD.look ? -1 : 0, lastState = () => RD.look ? lastSpread() + 1 : lastSpread();
-async function openReader(name, title, model){
+async function openReader(name, title, model, lift){
   closeReaderDoc();
   const gen = ++RD.gen;
   RD.open = true; RD.name = name; RD.model = model || null;
   $('readerTitle').textContent = cleanTitle(title) || 'Untitled PDF';
   $('readerPages').textContent = ''; $('readerGo').value = ''; $('readerGo').disabled = true;
   for (const d of document.querySelectorAll('dialog[open]')) if (d !== $('bookReader')) d.close();
+  if (lift) $('bookReader').classList.add('flying');   // before it shows: the room darkens as the book comes, the reader waits under it
   if (!$('bookReader').open) $('bookReader').showModal();
+  if (lift) flyBook(lift);
   readerLayout(); drawReader();
   try {
     readerSay(pdfjsLib ? 'Opening the book\u2026' : 'Getting the page reader ready (the first time, this downloads it)\u2026');
@@ -9905,21 +10038,25 @@ async function openReader(name, title, model){
       RD.W = 0; readerLayout(); readerPagesText(); drawReader();
       const at = [2 * saved, 2 * saved + 1].filter(p => p >= 1 && p <= RD.n), t0 = performance.now();
       while (gen === RD.gen && performance.now() - t0 < 1500 && !at.every(p => RD.cache.has(p))) await new Promise(r => setTimeout(r, 60));
+      await flyLand(gen);
       await new Promise(r => setTimeout(r, 250));
       if (gen === RD.gen && RD.spread === -1 && !RD.turn) rdRigid(-1, saved, 'turn');
     } else {
       RD.spread = saved;
       RD.W = 0; readerLayout(); readerPagesText(); drawReader();
+      await flyLand(gen);
     }
     rdCanvas.focus();
   } catch (err) {
     if (gen !== RD.gen) return;
+    flyLand(gen);
     readerSay(err && err.message === 'pdfjs'
       ? "Couldn't get the page reader (pdf.js). It's downloaded once from the internet into journal/pdfjs: check the connection and try again."
       : "This PDF couldn't be opened as a book. It may be damaged, or locked with a password.");
   }
 }
 function closeReaderDoc(){
+  flyStop();
   RD.gen++; RD.pgen++;
   if (RD.task) RD.task.destroy().catch(() => {});
   RD.task = RD.doc = RD.look = RD.model = RD.target = null; RD.n = 0; RD.cache.clear(); RD.queue = []; RD.turn = null; RD.open = false;
@@ -9927,13 +10064,14 @@ function closeReaderDoc(){
 }
 // The book as large as fits, and the canvas at the screen's own sharpness.
 const rdMargin = () => Math.max(8, RD.H * 0.024);   // how far the boards reach past the pages
+// How tall a page is, for a book of pages this shape lying open (two pages across) on a stage this size.
+const readerFit = (sw, sh, aspect) => { const pad = Math.max(28, Math.min(sw, sh) * 0.05); return Math.max(40, Math.min(sh - 2 * pad, (sw - 2 * pad) / (2 * aspect))); };
 function readerLayout(){
   const st = $('readerStage'), sw = st.clientWidth, sh = st.clientHeight, dpr = window.devicePixelRatio || 1;
   if (!sw || !sh) return;
   const cw = Math.round(sw * dpr), ch = Math.round(sh * dpr);
   if (rdCanvas.width !== cw || rdCanvas.height !== ch) { rdCanvas.width = cw; rdCanvas.height = ch; }
-  const pad = Math.max(28, Math.min(sw, sh) * 0.05);
-  const H = Math.max(40, Math.min(sh - 2 * pad, (sw - 2 * pad) / (2 * RD.aspect))), W = H * RD.aspect;
+  const H = readerFit(sw, sh, RD.aspect), W = H * RD.aspect;
   const changed = Math.abs(W - RD.W) > 1 || dpr !== RD.dpr;
   RD.W = W; RD.H = H; RD.dpr = dpr; RD.ox = (sw - 2 * W) / 2; RD.oy = (sh - H) / 2;
   if (changed) {
@@ -10361,7 +10499,7 @@ function rdRelease(ev){
 rdCanvas.addEventListener('pointerup', rdRelease);
 rdCanvas.addEventListener('pointercancel', () => { const t = RD.turn; if (t && t.mode === 'drag') rdAnimate(t, 'back'); });
 $('bookReader').addEventListener('keydown', ev => {
-  if (ev.target === $('readerGo') || !RD.doc) return;
+  if (ev.target === $('readerGo') || !RD.doc || FL.active) return;
   const forward = ['ArrowRight', 'PageDown', ' '], backward = ['ArrowLeft', 'PageUp'];
   if (forward.includes(ev.key)) { ev.preventDefault(); rdTurn(1); }
   else if (backward.includes(ev.key)) { ev.preventDefault(); rdTurn(-1); }
