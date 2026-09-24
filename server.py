@@ -80,7 +80,8 @@ boards, the insides of the boards and the page edges are those of the model (its
 colours), and the pages take the shape of its page block. The PDF's first page is left out (the
 model is the book's cover now), and pages are numbered as the PDF numbers them. A book with
 endpapers opens at them: the endpaper pasted inside the board, and the free endpaper opposite,
-whose plain back comes before the first page (and the same at the end). Turned back past the
+whose plain back comes before the first page (and the same at the end). Closing it (Close, or
+Escape) shuts the cover and floats the book back to where it was taken from. Turned back past the
 first page, or on past the last, the book closes again. The model's Open view can take the PDF
 out again (the PDF itself stays where it is). The pages are drawn by pdf.js (from Mozilla, the same that draws PDFs in Firefox), which
 the journal downloads once from the npm registry into journal/pdfjs and checks against its
@@ -4078,6 +4079,11 @@ body.moving iframe,body.holding iframe{pointer-events:none}
 #bookReader.flying::backdrop{animation:readerDim .8s ease both}
 #bookReader.flying .reader-bar{animation:readerBarIn .5s ease .45s both}
 @keyframes readerDim{from{background:rgba(10,12,11,0)}}
+#bookReader.leaving::backdrop{animation:readerUndim .9s ease .15s both}
+#bookReader.leaving .reader-bar{transition:opacity .3s ease;opacity:0}
+#bookReader.leaving #readerCanvas{opacity:0;pointer-events:none}
+#bookReader.leaving .reader-note{display:none}
+@keyframes readerUndim{to{background:rgba(10,12,11,0)}}
 @keyframes readerBarIn{from{opacity:0}}
 .reader-stage{position:relative;flex:1;min-height:0}
 #readerCanvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none;outline:none}
@@ -9936,7 +9942,7 @@ async function loadBookLook(model){
    book, and stays there, the same model: the reader carries on drawing it (below) until the book lies open.
    Where the model was, it's gone until the book is closed again. With reduced motion asked for, the reader
    simply opens. */
-const FL = {active:false, raf:0, hid:[], to:null, arrived:null, arrive:null, landed:false};
+const FL = {active:false, raf:0, hid:[], lift:null, to:null, arrived:null, arrive:null, landed:false, leaving:false};
 const flEase = t => t * t * t * (t * (t * 6 - 15) + 10);   // smootherstep: starts and ends at rest
 // How far off the camera is from a book in the reader: far enough that it looks as flat as the pages drawn over
 // it. A cover standing up is drawn as if seen from RD3_NEAR, so it's seen coming towards you; only the cover, as
@@ -10016,13 +10022,8 @@ function flyBook(lift){
   const st = $('readerStage').getBoundingClientRect(), sw = st.width, sh = st.height;
   if (!sw || !sh) { $('bookReader').classList.remove('flying'); return; }
   let to;
-  if (RD.b3 && RD.W) {
-    // Just as the reader will draw it lying closed (rd3Draw): its spine where the reader has it, the pages the
-    // reader's size, seen from far off, and lit as brightly as the reader draws it.
-    const d = RD.b3;
-    to = {x:st.left + RD.ox - (RD.W + rdMargin()) / 2 + RD.W, y:st.top + RD.oy + RD.H / 2, s:RD.H / (2 * d.py1), dist:RD3_FAR,
-      panX:-d.xl, panZ:-d.zi, bright:M3_REST_BRIGHT, still:true};
-  } else {
+  if (RD.b3 && RD.W) to = rd3Pose(false);
+  else {
     // Another model: its front cover as large as the reader's closed book, in the middle.
     const H = readerFit(sw, sh, Math.min(2, Math.max(0.25, lift.hx / lift.hy))), px = H + 2 * Math.max(8, H * 0.024);
     to = {x:st.left + sw / 2, y:st.top + sh / 2, s:px / (2 * lift.hy), dist:Math.max(lift.dist, 2.2), panX:0, panZ:-lift.hz, bright:0};
@@ -10030,7 +10031,7 @@ function flyBook(lift){
   const far = Math.hypot(to.x - lift.x, to.y - lift.y), ms = Math.max(750, Math.min(1100, 650 + far * 0.35));
   // Every view of it goes (on the right as well as the large view it may have come from): the book is in your hands.
   const hid = [lift.from, ...[...M3.views].filter(v => v.name === lift.name && v.canvas !== lift.from).map(v => v.canvas)];
-  Object.assign(FL, {active:true, hid, to, landed:false, arrived:new Promise(r => FL.arrive = r)});
+  Object.assign(FL, {active:true, hid, lift, to, landed:false, arrived:new Promise(r => FL.arrive = r)});
   for (const c of hid) c.style.visibility = 'hidden';
   const cv = $('readerFlight'); cv.hidden = false; cv.classList.remove('landing', 'entering');
   const t0 = performance.now();
@@ -10044,6 +10045,13 @@ function flyBook(lift){
   };
   FL.raf = requestAnimationFrame(step);
 }
+// Just as the reader draws a journal book lying closed (rd3Draw), at the front or (back) turned over at the back:
+// its spine where the reader has it, the pages the reader's size, seen from far off, and lit as brightly.
+function rd3Pose(back){
+  const d = RD.b3, st = $('readerStage').getBoundingClientRect(), shift = (back ? 1 : -1) * (RD.W + rdMargin()) / 2;
+  return {x:st.left + RD.ox + shift + RD.W, y:st.top + RD.oy + RD.H / 2, s:RD.H / (2 * d.py1), dist:RD3_FAR,
+    yaw:back ? Math.PI : 0, panX:back ? d.xl : -d.xl, panZ:-d.zi, bright:M3_REST_BRIGHT, still:true};
+}
 // One frame of the flight, t going 0 to 1; after that, wait is how long it has hovered.
 function flyFrame(a, b, t, wait){
   const m = M3.cache.get(a.name); if (!m || !m.data) return;
@@ -10056,7 +10064,9 @@ function flyFrame(a, b, t, wait){
   const lift = Math.min(70, 0.14 * Math.hypot(b.x - a.x, b.y - a.y)) * Math.sin(Math.PI * e);
   const bob = wait > 0 && !b.still ? Math.sin(wait / 520) * 2 * Math.min(1, wait / 400) : 0;   // hovering while the pages get ready
   const x = lerp(a.x, b.x, e), y = lerp(a.y, b.y, e) - lift + bob, s = Math.exp(lerp(Math.log(a.s), Math.log(b.s), e));
-  const dist = 1 / lerp(1 / a.dist, 1 / b.dist, e), yaw = lerp(a.yaw, 0, er), pitch = lerp(a.pitch, 0, er);
+  // (turned the shorter way round to the yaw it arrives at)
+  const by = a.yaw + Math.atan2(Math.sin((b.yaw || 0) - a.yaw), Math.cos((b.yaw || 0) - a.yaw));
+  const dist = 1 / lerp(1 / a.dist, 1 / b.dist, e), yaw = lerp(a.yaw, by, er), pitch = lerp(a.pitch, 0, er);
   const panX = lerp(a.panX, b.panX, e), panY = lerp(a.panY, 0, e), panZ = lerp(0, b.panZ, e);
   const cy = Math.cos(yaw), sy = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch);
   const rotY = [cy,0,-sy,0, 0,1,0,0, sy,0,cy,0, 0,0,0,1], rotX = [1,0,0,0, 0,cp,sp,0, 0,-sp,cp,0, 0,0,0,1];
@@ -10099,11 +10109,57 @@ function flyEnd(){
   const cv = $('readerFlight'); cv.hidden = true; cv.classList.remove('landing', 'entering');
   $('bookReader').classList.remove('flying');
 }
+/* Closing the book: the flight the other way. The book is shut first (its cover swings closed, if it's open), then
+   it floats back to where it was taken from (or, if that's gone, to the model on the right), turning back to how it
+   lay there, while the room lightens; there the model is itself again. Without anywhere to go back to (or with
+   reduced motion asked for), the reader simply closes. */
+async function closeBook(){
+  const dlg = $('bookReader');
+  if (FL.leaving) return;
+  const lift0 = FL.lift, name = lift0 && lift0.name;
+  const target = name && [lift0.from, ...FL.hid].find(c => c && c.isConnected && c.getBoundingClientRect().width > 3);
+  if (!target || FL.active || !RD.doc) { dlg.close(); return; }
+  FL.leaving = true;
+  const gen = RD.gen, K = lastSpread();
+  try {
+    // Shut: from an open spread, the front cover swings closed over it.
+    if (RD.b3 && RD.look && RD.spread >= 0 && RD.spread <= K) {
+      rdSettle(); rdRigid(RD.spread, -1, 'turn');
+      while (gen === RD.gen && (RD.turn || RD.spread !== -1)) await new Promise(r => setTimeout(r, 30));
+    }
+    if (gen !== RD.gen) return;
+    const lift = bookLift(name, target), back = RD.spread > K;
+    if (!lift) { dlg.close(); return; }
+    const to = RD.b3 && RD.look ? rd3Pose(back) : FL.to;
+    if (!to) { dlg.close(); return; }
+    FL.active = true; FL.landed = false;   // the reader stops drawing the book; the flight has it now
+    const cv = $('readerFlight');
+    const fresh = cv.hidden;
+    cv.hidden = false; cv.classList.remove('landing', 'entering');
+    flyFrame(lift, to, 1, 0);
+    if (fresh) { void cv.offsetWidth; cv.classList.add('entering'); }   // a book shown open, not as the model: the model comes in over it
+    dlg.classList.add('leaving');
+    await new Promise(r => setTimeout(r, fresh ? 200 : 0));
+    const far = Math.hypot(to.x - lift.x, to.y - lift.y), ms = Math.max(750, Math.min(1100, 650 + far * 0.35)), t0 = performance.now();
+    await new Promise(done => {
+      const step = now => {
+        if (gen !== RD.gen) { done(); return; }
+        const u = Math.min(1, (now - t0) / ms);
+        flyFrame(lift, to, 1 - u, 0);
+        if (u < 1) FL.raf = requestAnimationFrame(step); else done();
+      };
+      FL.raf = requestAnimationFrame(step);
+    });
+  } finally {
+    FL.leaving = false; dlg.classList.remove('leaving');
+    if (dlg.open) dlg.close();
+  }
+}
 // Closing the book puts the model back where it was.
 function flyStop(){
   flyEnd();
   for (const c of FL.hid) c.style.visibility = '';
-  FL.hid = [];
+  FL.hid = []; FL.lift = FL.to = null;
 }
 
 /* The book in the reader while it's closed, or while a cover swings: the journal's book model itself, drawn on
@@ -10505,11 +10561,11 @@ function rdEdges(c, x0, t, left){
 // How many pages lie on each side of the book open at spread k.
 const rdCount = (left, k) => left ? 2 * k : Math.max(0, RD.n - 2 * k);
 // One half of the open book at spread k: its board (the inside of the board, in a book), the edges of its
-// pages, and (with page) its page. The board of one of the journal's book models is drawn just as the model
+// pages (count pages' worth, if not all that lie on that side), and (with page) its page. The board of one of the journal's book models is drawn just as the model
 // shows it (rd3Draw), so the one can take over from the other unseen.
-function rdHalf(c, side, k, page){
+function rdHalf(c, side, k, page, count){
   const W = RD.W, H = RD.H, b = rdMargin(), left = side === 'L', look = RD.look, model = !!RD.b3;
-  const e = rdEdgeSplit(left, k), x = left ? -b : W, w = W + b;
+  const e = count === 0 ? {t:0, out:0, inn:0} : rdEdgeSplit(left, k), x = left ? -b : W, w = W + b;
   c.save();
   c.beginPath(); c.roundRect(x, -b, w, H + 2 * b, model ? 0 : left ? [b * 0.5, 0, 0, b * 0.5] : [0, b * 0.5, b * 0.5, 0]); c.clip();
   rdFill(c, look && (left ? look.insideL : look.insideR), x, -b, w, H + 2 * b, READER_BOARD);
@@ -10575,7 +10631,9 @@ function drawReader(){
     c.drawImage(cv, front ? W : -b, -b, W + b, H + 2 * b);
     return;
   }
-  rdHalf(c, 'L', k, false); rdHalf(c, 'R', k, false);
+  // A leaf being turned that's the last on its side takes the edges of the pages with it: none are left there.
+  const last = t && t.kind === 'curl' ? (t.dir > 0 ? RD.n - 2 * k <= 2 : 2 * k <= 2) : false;
+  rdHalf(c, 'L', k, false, last && t.dir < 0 ? 0 : undefined); rdHalf(c, 'R', k, false, last && t.dir > 0 ? 0 : undefined);
   const L = 2 * k, R = 2 * k + 1;
   const len = t ? Math.hypot(t.P.x - t.C.x, t.P.y - t.C.y) : 0;
   if (!t || len < 0.5) { rdSlot(c, L, 0); rdSlot(c, R, W); return; }
@@ -10823,7 +10881,7 @@ function rdRelease(ev){
 rdCanvas.addEventListener('pointerup', rdRelease);
 rdCanvas.addEventListener('pointercancel', () => { const t = RD.turn; if (t && t.mode === 'drag') rdAnimate(t, 'back'); });
 $('bookReader').addEventListener('keydown', ev => {
-  if (ev.target === $('readerGo') || !RD.doc || FL.active) return;
+  if (ev.target === $('readerGo') || !RD.doc || FL.active || FL.leaving) return;
   const forward = ['ArrowRight', 'PageDown', ' '], backward = ['ArrowLeft', 'PageUp'];
   if (forward.includes(ev.key)) { ev.preventDefault(); rdTurn(1); }
   else if (backward.includes(ev.key)) { ev.preventDefault(); rdTurn(-1); }
@@ -10831,7 +10889,8 @@ $('bookReader').addEventListener('keydown', ev => {
 });
 $('readerGo').addEventListener('change', () => { const v = parseInt($('readerGo').value, 10); if (v) rdJump(v); });
 $('readerGo').addEventListener('keydown', ev => { if (ev.key === 'Enter') { ev.preventDefault(); $('readerGo').blur(); rdCanvas.focus(); } });
-$('readerClose').addEventListener('click', () => $('bookReader').close());
+$('readerClose').addEventListener('click', closeBook);
+$('bookReader').addEventListener('cancel', ev => { ev.preventDefault(); closeBook(); });   // Escape
 $('bookReader').addEventListener('close', closeReaderDoc);
 
 /* Dragging an entry from the list into the writing */
