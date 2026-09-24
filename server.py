@@ -9942,7 +9942,7 @@ async function loadBookLook(model){
    book, and stays there, the same model: the reader carries on drawing it (below) until the book lies open.
    Where the model was, it's gone until the book is closed again. With reduced motion asked for, the reader
    simply opens. */
-const FL = {active:false, raf:0, hid:[], lift:null, to:null, arrived:null, arrive:null, landed:false, leaving:false};
+const FL = {active:false, raf:0, hid:[], lift:null, to:null, arrived:null, arrive:null, landed:false, leaving:false, t:0, ms:0};
 const flEase = t => t * t * t * (t * (t * 6 - 15) + 10);   // smootherstep: starts and ends at rest
 // How far off the camera is from a book in the reader: far enough that it looks as flat as the pages drawn over
 // it. A cover standing up is drawn as if seen from RD3_NEAR, so it's seen coming towards you; only the cover, as
@@ -10039,6 +10039,7 @@ function flyBook(lift){
     FL.raf = 0;
     if (!FL.active) return;
     const t = Math.min(1, (now - t0) / ms);
+    FL.t = t; FL.ms = ms;
     flyFrame(lift, to, t, t < 1 ? 0 : now - t0 - ms);
     if (t >= 1 && FL.arrive) { FL.arrive(); FL.arrive = null; }
     if (!FL.landed) FL.raf = requestAnimationFrame(step);
@@ -10113,9 +10114,39 @@ function flyEnd(){
    it floats back to where it was taken from (or, if that's gone, to the model on the right), turning back to how it
    lay there, while the room lightens; there the model is itself again. Without anywhere to go back to (or with
    reduced motion asked for), the reader simply closes. */
+// Flies it back from t (of the way up) to where it was, over as long as it took to come that far.
+function flyBackFrom(lift, to, t, ms, gen){
+  const t0 = performance.now(), dur = Math.max(250, ms * t);
+  return new Promise(done => {
+    const step = now => {
+      if (gen !== RD.gen) { done(); return; }
+      const u = Math.min(1, (now - t0) / dur);
+      flyFrame(lift, to, t * (1 - u), 0);
+      if (u < 1) FL.raf = requestAnimationFrame(step); else done();
+    };
+    FL.raf = requestAnimationFrame(step);
+  });
+}
 async function closeBook(){
   const dlg = $('bookReader');
   if (FL.leaving) return;
+  // Closed while it's still on its way up: it goes back from where it's got to.
+  if (FL.active && !FL.landed && FL.lift && FL.to) {
+    const gen = RD.gen, lift = FL.lift, to = FL.to, t = FL.t;
+    FL.leaving = true; FL.landed = true;   // the flight up stops here (and won't land)
+    if (FL.raf) { cancelAnimationFrame(FL.raf); FL.raf = 0; }
+    // The room lightens again from however dark it had got, and the bar goes, as the book goes back.
+    const ms = Math.max(250, (FL.ms || 900) * t);
+    try {
+      for (const an of dlg.getAnimations({subtree:true})) {
+        const ct = Math.max(0, Number(an.currentTime) || 0);
+        an.reverse(); an.updatePlaybackRate(-Math.max(0.25, ct / ms));
+      }
+    } catch (e) {}
+    try { await flyBackFrom(lift, to, t, FL.ms || 900, gen); }
+    finally { FL.leaving = false; dlg.classList.remove('leaving'); if (dlg.open) dlg.close(); }
+    return;
+  }
   const lift0 = FL.lift, name = lift0 && lift0.name;
   const target = name && [lift0.from, ...FL.hid].find(c => c && c.isConnected && c.getBoundingClientRect().width > 3);
   if (!target || FL.active || !RD.doc) { dlg.close(); return; }
@@ -10140,16 +10171,8 @@ async function closeBook(){
     if (fresh) { void cv.offsetWidth; cv.classList.add('entering'); }   // a book shown open, not as the model: the model comes in over it
     dlg.classList.add('leaving');
     await new Promise(r => setTimeout(r, fresh ? 200 : 0));
-    const far = Math.hypot(to.x - lift.x, to.y - lift.y), ms = Math.max(750, Math.min(1100, 650 + far * 0.35)), t0 = performance.now();
-    await new Promise(done => {
-      const step = now => {
-        if (gen !== RD.gen) { done(); return; }
-        const u = Math.min(1, (now - t0) / ms);
-        flyFrame(lift, to, 1 - u, 0);
-        if (u < 1) FL.raf = requestAnimationFrame(step); else done();
-      };
-      FL.raf = requestAnimationFrame(step);
-    });
+    const far = Math.hypot(to.x - lift.x, to.y - lift.y);
+    await flyBackFrom(lift, to, 1, Math.max(750, Math.min(1100, 650 + far * 0.35)), gen);
   } finally {
     FL.leaving = false; dlg.classList.remove('leaving');
     if (dlg.open) dlg.close();
@@ -10535,8 +10558,10 @@ const rdSlot = (c, p, x) => rdSlotAt(c, p, x, RD.spread);
    page's outer edge would be, that page being drawn that much narrower, as it looks curving up from the spine. */
 function rdStack(count, k){
   if (!count || !RD.n) return 0;
+  // As thick as that many leaves are (a leaf of paper is about a two-thousandth of the page's height; count pages are
+  // half as many leaves), up to as much as the book can show.
   const f = Math.min(1, Math.max(0, 2 * k / RD.n)), most = RD.W * (RD.look ? Math.min(0.08, 0.02 + RD.look.thick * 0.3) : 0.035);
-  return Math.max(1, most * Math.sin(Math.PI * f) * Math.min(1, 2 * count / RD.n));
+  return Math.max(1, Math.min(most, count / 2 * RD.H * 0.00045) * Math.sin(Math.PI * f));
 }
 function rdEdgeSplit(left, k){
   const t = rdStack(rdCount(left, k), k), out = Math.min(t, rdMargin() * 0.8);
