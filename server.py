@@ -111,7 +111,9 @@ the covering (which show round them), with a free leaf at the start and the end 
 Choose plain, marbled, combed or stone (a made-up sheet, its pattern running on across the fold),
 none, or a photo of real endpaper on the Endpaper tab. With a photo of the inside of a board
 (the Inside tab), the endpaper is pasted over it, its edges showing round it as the turn-ins. Show open, over the preview, swings the front board
-open to see the book lying open at its endpapers. More photos can go on the outer edges of the boards (one photo of a stretch of
+open to see the book lying open at its endpapers. Back cover can be the front's photo, mirrored
+across the spine or just as it is, and Inside of the back can be the front board's inside (photo
+and endpaper) mirrored or just as it is. More photos can go on the outer edges of the boards (one photo of a stretch of
 edge, repeated along all six at its true size, which Edge pattern can make larger or smaller),
 and on the headcap and tailcap, which then reach a little way in over the pages.
 Paper sets what the pages are printed on as the book is read: white, cream, aged, laid or
@@ -4694,6 +4696,10 @@ body:not(.can-bring-back) .arch-model-add{display:none}
           <label title="The endpapers: pasted inside the boards, over the turned-in edges of the covering, and a free leaf at the start and the end of the book">Endpapers <select id="bookEnds"><option value="plain">Plain</option><option value="marbled">Marbled</option><option value="combed">Combed</option><option value="stone">Stone</option><option value="none">None</option><option value="photo" id="bookEndsPhoto" disabled>From the photo</option></select></label>
           <label>Spine <select id="bookSpine"><option value="round">Rounded</option><option value="flat">Flat</option></select></label>
           <label>Bands <select id="bookBands"><option value="0">None</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option></select></label>
+        </div>
+        <div class="book-size">
+          <label title="What the back cover shows: its own photo (or the cover's colour), or the front's photo, flipped across the spine or just as it is">Back cover <select id="bookBackFrom"><option value="own">Its own photo</option><option value="mirror">The front, mirrored</option><option value="same">The front, as it is</option></select></label>
+          <label title="What the inside of the back board shows: the inside of the front board (its photo and endpaper), flipped across the spine or just as it is">Inside of the back <select id="bookInsideBack"><option value="mirror">The front's, mirrored</option><option value="same">The front's, as it is</option></select></label>
         </div>
         <div class="book-bands" id="bookBandPos" hidden></div>
         <div class="book-bands" id="bookRimBox" hidden><label title="How large the board edges’ photo is along the edges: 100% is its true size">Edge pattern <input id="bookRim" type="range" min="25" max="400" step="5" value="100"> <span id="bookRimPct">100%</span></label></div>
@@ -11969,7 +11975,7 @@ const BOOK_NAMES = {front:'Front', spine:'Spine', back:'Back', pages:'Page edges
 const evenBands = n => Array.from({length:n}, (_, i) => (i + 1) / (n + 1));
 const BOOK_LEAVES = ['white', 'cream', 'aged', 'laid', 'rough', 'photo'];
 const BOOK_ENDS = ['plain', 'marbled', 'combed', 'stone', 'none', 'photo'];
-const book = {entry:null, draft:null, face:'front', faces:{}, dims:{h:20, w:14, t:3, manual:false}, edges:'plain', leaf:'white', ends:'plain', round:true, bands:[], rimScale:1,
+const book = {entry:null, draft:null, face:'front', faces:{}, dims:{h:20, w:14, t:3, manual:false}, edges:'plain', leaf:'white', ends:'plain', backFrom:'own', insideBack:'mirror', round:true, bands:[], rimScale:1,
   timer:0, busy:false, drag:null, view:null, seq:0, openRaf:0};
 const emptyBookFace = () => ({pic:null, data:null, quad:null, rot:0, extra:[[], [], [], []], zoom:{s:1, px:0, py:0}});
 function bookFace(){ return book.faces[book.face]; }
@@ -12222,16 +12228,18 @@ function sheetHalf(cv, i){
   h.getContext('2d').drawImage(cv, -i * h.width, 0);
   return h;
 }
-function pastedown(sheet, under, aspect){
+function pastedown(sheet, under, aspect, spineLeft){
   const H = 1400, W = Math.max(200, Math.round(H * aspect)), cv = document.createElement('canvas'); cv.width = W; cv.height = H;
   const x = cv.getContext('2d');
   if (Array.isArray(under)) { x.fillStyle = 'rgb(' + under.map(v => Math.round(v)).join(',') + ')'; x.fillRect(0, 0, W, H); }
   else x.drawImage(under, 0, 0, W, H);
-  const ix = Math.round(W * 0.055), iy = Math.round(H * 0.035);
-  x.drawImage(sheet, ix, iy, W - ix, H - 2 * iy);
+  // (spineLeft: for the back board, as it lies open, with the spine on its left)
+  const ix = Math.round(W * 0.055), iy = Math.round(H * 0.035), sx = spineLeft ? 0 : ix, ex = spineLeft ? W - ix : W;
+  x.drawImage(sheet, sx, iy, W - ix, H - 2 * iy);
   // the sheet's edge, a little raised over the leather
   x.strokeStyle = 'rgba(0,0,0,.28)'; x.lineWidth = 2;
-  x.beginPath(); x.moveTo(W, iy); x.lineTo(ix, iy); x.lineTo(ix, H - iy); x.lineTo(W, H - iy); x.stroke();
+  const fx = spineLeft ? ex : sx, jx = spineLeft ? 0 : W;
+  x.beginPath(); x.moveTo(jx, iy); x.lineTo(fx, iy); x.lineTo(fx, H - iy); x.lineTo(jx, H - iy); x.stroke();
   return cv;
 }
 
@@ -12418,6 +12426,12 @@ async function buildBookGlb(maxSide){
   const f = book.faces, img = {};
   for (const k of BOOK_FACES) if (f[k].data) img[k] = straighten(f[k], k === 'headcap' || k === 'tailcap' ? Math.min(maxSide, 1024) : maxSide);
   const board = img.front ? edgeColour(img.front) : [110, 40, 40];
+  // The back cover can be the front's photo, flipped across the spine (as a binding decorated alike on both sides
+  // is), or just as it is.
+  if (book.backFrom !== 'own' && img.front) img.back = book.backFrom === 'mirror' ? mirrored(img.front) : img.front;
+  // The inside of the back board is the front's, flipped across the spine or just as it is. As the boards lie
+  // open, the front's has its spine on the right, the back's on the left.
+  const flip = book.insideBack !== 'same', under = img.inside;
   // The endpapers: a photo of endpaper, or one made up; pasted inside the boards over the turned-in covering (the
   // photo of the inside of a board, if there is one, or the cover's colour), and the free leaf at each end.
   if (book.ends === 'none' || (book.ends === 'photo' && !img.endsheet)) delete img.endsheet;
@@ -12426,9 +12440,12 @@ async function buildBookGlb(maxSide){
     // from one to the other across the fold. A photo does for both.
     let paste = img.endsheet;
     if (book.ends !== 'photo') { const whole = endTexture(book.ends, book.dims.w / book.dims.h); paste = sheetHalf(whole, 0); img.endsheet = sheetHalf(whole, 1); }
-    img.inside = pastedown(paste, img.inside || board.map(v => v * 0.9), book.dims.w / book.dims.h);
+    const aspect = book.dims.w / book.dims.h, turnIn = under || board.map(v => v * 0.9);
+    img.inside = pastedown(paste, turnIn, aspect);
+    // Just as it is, the endpaper and the turned-in covering aren't flipped, but it's still pasted into the joint.
+    if (!flip) img.insideBack = pastedown(paste, turnIn, aspect, true);
   }
-  if (img.inside) img.insideBack = mirrored(img.inside);
+  if (img.inside && !img.insideBack) img.insideBack = flip ? mirrored(img.inside) : img.inside;
   const dark = c => c.map(v => v * 0.82);
   const capColour = dark(img.spine ? edgeColour(img.spine) : board), endpaper = [232, 224, 204];
   const materials = {
@@ -12465,7 +12482,7 @@ async function openBookMaker(picture, draft){
   const e = entries.get(currentId); if (!e) return;
   const d = draft ? draft.data || {} : null;
   book.entry = currentId; book.draft = draft ? draft.code : null; book.face = 'front';
-  book.dims = {h:20, w:14, t:3, manual:false}; book.edges = 'plain'; book.leaf = 'white'; book.ends = 'plain'; book.round = true; book.bands = []; book.rimScale = 1;
+  book.dims = {h:20, w:14, t:3, manual:false}; book.edges = 'plain'; book.leaf = 'white'; book.ends = 'plain'; book.backFrom = 'own'; book.insideBack = 'mirror'; book.round = true; book.bands = []; book.rimScale = 1;
   for (const k of BOOK_FACES) book.faces[k] = emptyBookFace();
   if (d) {
     const dm = d.dims || {}, ok = v => typeof v === 'number' && v > 0;
@@ -12473,6 +12490,8 @@ async function openBookMaker(picture, draft){
     if (['plain', 'gilt', 'giltTop', 'red', 'photo'].includes(d.edges)) book.edges = d.edges;
     if (BOOK_LEAVES.includes(d.leaf)) book.leaf = d.leaf;
     if (BOOK_ENDS.includes(d.ends)) book.ends = d.ends;
+    if (['own', 'mirror', 'same'].includes(d.backFrom)) book.backFrom = d.backFrom;
+    if (['mirror', 'same'].includes(d.insideBack)) book.insideBack = d.insideBack;
     book.round = d.round !== false;
     if (Array.isArray(d.bands) && d.bands.length <= 5 && d.bands.every(v => typeof v === 'number' && v > 0 && v < 1))
       book.bands = d.bands.slice();
@@ -12487,6 +12506,7 @@ async function openBookMaker(picture, draft){
   $('bookBands').value = String(book.bands.length); showBookBands(); $('bookEdgesPhoto').disabled = true;
   $('bookLeaf').value = book.leaf === 'photo' ? 'white' : book.leaf; $('bookLeafPhoto').disabled = true;
   $('bookEnds').value = book.ends === 'photo' ? 'plain' : book.ends; $('bookEndsPhoto').disabled = true;
+  $('bookBackFrom').value = book.backFrom; $('bookInsideBack').value = book.insideBack;
   $('bookDiscard').hidden = !book.draft; disarm($('bookDiscard'), 'Discard draft');
   M3.states.delete('book-preview');
   $('bookDialog').showModal();
@@ -12593,6 +12613,11 @@ function showBookFace(){
     || 'Drag the corners onto the book\u2019s corners, and Turn it until the top is marked Top. Drag a + to add a point where a side curves.')
     + ' Scroll to zoom in.';
   $('bookCropNote').hidden = !!f.pic;
+  if (book.face === 'back' && book.backFrom !== 'own') {   // the back is the front's photo: said over whatever's here
+    $('bookCropNote').textContent = 'The back cover is the front\u2019s photo, ' + (book.backFrom === 'mirror' ? 'mirrored across the spine' : 'just as it is')
+      + ' (as set under Back cover). Choose Its own photo there to give it one of its own.';
+    $('bookCropNote').hidden = false;
+  }
   $('bookTurn').disabled = $('bookWhole').disabled = !f.data;
   $('bookNone').hidden = book.face === 'front'; $('bookNone').disabled = !f.pic;
   const pics = $('bookPics'); pics.replaceChildren();
@@ -12874,6 +12899,8 @@ $('bookFromPhotos').addEventListener('click', () => { book.dims.manual = false; 
 $('bookEdges').addEventListener('change', () => { book.edges = $('bookEdges').value; bookChanged(); });
 $('bookLeaf').addEventListener('change', () => { book.leaf = $('bookLeaf').value; bookChanged(); });
 $('bookEnds').addEventListener('change', () => { book.ends = $('bookEnds').value; bookChanged(); });
+$('bookBackFrom').addEventListener('change', () => { book.backFrom = $('bookBackFrom').value; showBookFace(); bookChanged(); });
+$('bookInsideBack').addEventListener('change', () => { book.insideBack = $('bookInsideBack').value; bookChanged(); });
 $('bookSpine').addEventListener('change', () => { book.round = $('bookSpine').value === 'round'; bookChanged(); });
 // Anything changed: the preview follows a moment later.
 function bookChanged(){
@@ -12938,7 +12965,7 @@ function bookDraftData(){
     const f = book.faces[k]; if (!f.pic) continue;
     faces[k] = f.data ? {pic:f.pic, quad:f.quad, rot:f.rot, extra:f.extra, w:f.data.width, h:f.data.height} : {pic:f.pic};
   }
-  return {entry:book.entry, saved:Date.now(), face:book.face, faces, dims:Object.assign({}, book.dims), edges:book.edges, leaf:book.leaf, ends:book.ends, round:book.round, bands:book.bands.slice(), rimScale:book.rimScale};
+  return {entry:book.entry, saved:Date.now(), face:book.face, faces, dims:Object.assign({}, book.dims), edges:book.edges, leaf:book.leaf, ends:book.ends, backFrom:book.backFrom, insideBack:book.insideBack, round:book.round, bands:book.bands.slice(), rimScale:book.rimScale};
 }
 $('bookDraft').addEventListener('click', async () => {
   const id = book.entry, e = entries.get(id), btn = $('bookDraft'); if (!e || book.busy) return;
