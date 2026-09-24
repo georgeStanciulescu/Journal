@@ -109,8 +109,8 @@ Scroll over the photo to zoom in on it (drag the photo to move about; Fit shows 
 Endpapers are as a rebound book has them: pasted inside each board over the turned-in edges of
 the covering (which show round them), with a free leaf at the start and the end of the book.
 Choose plain, marbled, combed or stone (a made-up sheet, its pattern running on across the fold),
-none, or a photo of real endpaper on the Endpaper tab. A photo of the whole inside of a board
-(the Inside tab) is used as it is instead. Show open, over the preview, swings the front board
+none, or a photo of real endpaper on the Endpaper tab. With a photo of the inside of a board
+(the Inside tab), the endpaper is pasted over it, its edges showing round it as the turn-ins. Show open, over the preview, swings the front board
 open to see the book lying open at its endpapers. More photos can go on the outer edges of the boards (one photo of a stretch of
 edge, repeated along all six at its true size, which Edge pattern can make larger or smaller),
 and on the headcap and tailcap, which then reach a little way in over the pages.
@@ -12213,8 +12213,8 @@ function endTexture(kind, aspect){
   endMade.set(key, cv);
   return cv;
 }
-/* The inside of a board as a rebound book has it: the covering turned in over the edges of the board (turnIn, a
-   colour), and the endpaper (sheet) pasted over it, stopping short of the edges at the head, fore-edge and tail and
+/* The inside of a board as a rebound book has it: the covering turned in over the edges of the board (under: the
+   photo of the inside of a board, or a colour), and the endpaper (sheet) pasted over it, stopping short of the edges at the head, fore-edge and tail and
    running into the joint at the spine (on the right, as the board lies open). */
 // One half of a sheet (0 the left, 1 the right).
 function sheetHalf(cv, i){
@@ -12222,10 +12222,11 @@ function sheetHalf(cv, i){
   h.getContext('2d').drawImage(cv, -i * h.width, 0);
   return h;
 }
-function pastedown(sheet, turnIn, aspect){
+function pastedown(sheet, under, aspect){
   const H = 1400, W = Math.max(200, Math.round(H * aspect)), cv = document.createElement('canvas'); cv.width = W; cv.height = H;
   const x = cv.getContext('2d');
-  x.fillStyle = 'rgb(' + turnIn.map(v => Math.round(v)).join(',') + ')'; x.fillRect(0, 0, W, H);
+  if (Array.isArray(under)) { x.fillStyle = 'rgb(' + under.map(v => Math.round(v)).join(',') + ')'; x.fillRect(0, 0, W, H); }
+  else x.drawImage(under, 0, 0, W, H);
   const ix = Math.round(W * 0.055), iy = Math.round(H * 0.035);
   x.drawImage(sheet, ix, iy, W - ix, H - 2 * iy);
   // the sheet's edge, a little raised over the leather
@@ -12417,15 +12418,15 @@ async function buildBookGlb(maxSide){
   const f = book.faces, img = {};
   for (const k of BOOK_FACES) if (f[k].data) img[k] = straighten(f[k], k === 'headcap' || k === 'tailcap' ? Math.min(maxSide, 1024) : maxSide);
   const board = img.front ? edgeColour(img.front) : [110, 40, 40];
-  // The endpapers: a photo of endpaper, or one made up; pasted inside the boards over the turn-ins (unless there's
-  // a photo of the whole inside), and the free leaf at each end.
+  // The endpapers: a photo of endpaper, or one made up; pasted inside the boards over the turned-in covering (the
+  // photo of the inside of a board, if there is one, or the cover's colour), and the free leaf at each end.
   if (book.ends === 'none' || (book.ends === 'photo' && !img.endsheet)) delete img.endsheet;
   else {
     // A made-up sheet is folded: its left half pasted down, its right half the free leaf, the pattern running on
     // from one to the other across the fold. A photo does for both.
     let paste = img.endsheet;
     if (book.ends !== 'photo') { const whole = endTexture(book.ends, book.dims.w / book.dims.h); paste = sheetHalf(whole, 0); img.endsheet = sheetHalf(whole, 1); }
-    if (!img.inside) img.inside = pastedown(paste, board.map(v => v * 0.9), book.dims.w / book.dims.h);
+    img.inside = pastedown(paste, img.inside || board.map(v => v * 0.9), book.dims.w / book.dims.h);
   }
   if (img.inside) img.insideBack = mirrored(img.inside);
   const dark = c => c.map(v => v * 0.82);
@@ -12564,7 +12565,7 @@ function endsPhoto(on){
 const BOOK_NOTES = {
   front:'Choose a photo of the front cover from the pictures below.',
   pages:'Choose a photo of the page edges below, to put on the head, fore-edge and tail. Without one, they\u2019re as set under Page edges.',
-  inside:'Only if you have a photo of the whole inside of a board, opened out (endpaper, turn-ins and all): it goes inside both boards as it is, in place of the endpaper made from Endpapers. Without one, the endpaper is pasted over the turned-in edges of the covering, as set under Endpapers.',
+  inside:'Choose a photo of the inside of a board, opened out, showing the covering turned in over its edges. It goes inside both boards, and the endpaper (as set under Endpapers) is pasted over it, leaving its edges showing round it; with Endpapers set to None, it\u2019s seen whole. Without one, the turn-ins are the colour of the cover.',
   endsheet:'Choose a photo of endpaper (marbled, patterned or plain): a sheet of it, or a stretch of it. It\u2019s pasted inside both boards, leaving the turned-in edges of the covering showing round it, and makes the free leaf at the start and the end of the book. Without one, it\u2019s as set under Endpapers.',
   leaf:'Choose a photo of a blank page (or any paper), to be the paper the book\u2019s pages are printed on as it\u2019s read: it\u2019s stretched over each page, under the print. Without one, the paper is as set under Paper.',
   boardEdges:'Choose a photo of the edge of a board (its narrow outer edge, where the gilt roll or the leather\u2019s edge is). A short stretch is enough: it\u2019s repeated along the head, fore-edge and tail of both boards. Without one, they\u2019re the colour of the cover.',
