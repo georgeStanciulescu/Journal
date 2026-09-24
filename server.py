@@ -4079,7 +4079,7 @@ body.moving iframe,body.holding iframe{pointer-events:none}
 #bookReader.flying::backdrop{animation:readerDim .8s ease both}
 #bookReader.flying .reader-bar{animation:readerBarIn .5s ease .45s both}
 @keyframes readerDim{from{background:rgba(10,12,11,0)}}
-#bookReader.leaving::backdrop{animation:readerUndim .9s ease .15s both}
+#bookReader.leaving::backdrop{animation:readerUndim .7s ease both}
 #bookReader.leaving .reader-bar{transition:opacity .3s ease;opacity:0}
 #bookReader.leaving #readerCanvas{opacity:0;pointer-events:none}
 #bookReader.leaving .reader-note{display:none}
@@ -10144,7 +10144,7 @@ async function closeBook(){
       }
     } catch (e) {}
     try { await flyBackFrom(lift, to, t, FL.ms || 900, gen); }
-    finally { FL.leaving = false; dlg.classList.remove('leaving'); if (dlg.open) dlg.close(); }
+    finally { if (dlg.open) dlg.close(); FL.leaving = false; dlg.classList.remove('leaving'); }
     return;
   }
   const lift0 = FL.lift, name = lift0 && lift0.name;
@@ -10153,10 +10153,13 @@ async function closeBook(){
   FL.leaving = true;
   const gen = RD.gen, K = lastSpread();
   try {
-    // Shut: from an open spread, the front cover swings closed over it.
-    if (RD.b3 && RD.look && RD.spread >= 0 && RD.spread <= K) {
-      rdSettle(); rdRigid(RD.spread, -1, 'turn');
-      while (gen === RD.gen && (RD.turn || RD.spread !== -1)) await new Promise(r => setTimeout(r, 30));
+    // Shut: a cover on its way open goes back the way it came; one on its way shut carries on; and from an open
+    // spread (or a page being turned), the front cover swings closed over it.
+    if (RD.b3 && RD.look) {
+      const t = RD.turn;
+      if (t && t.kind === 'rigid') { if (t.to >= 0 && t.to <= K) rdAnimate(t, 'back'); }
+      else if (RD.spread >= 0 && RD.spread <= K) { RD.turn = null; rdRigid(RD.spread, -1, 'turn'); }
+      while (gen === RD.gen && RD.turn) await new Promise(r => setTimeout(r, 30));
     }
     if (gen !== RD.gen) return;
     const lift = bookLift(name, target), back = RD.spread > K;
@@ -10174,8 +10177,9 @@ async function closeBook(){
     const far = Math.hypot(to.x - lift.x, to.y - lift.y);
     await flyBackFrom(lift, to, 1, Math.max(750, Math.min(1100, 650 + far * 0.35)), gen);
   } finally {
-    FL.leaving = false; dlg.classList.remove('leaving');
+    // closed first: let go of the lightening before, and the room would be dark again for a moment
     if (dlg.open) dlg.close();
+    FL.leaving = false; dlg.classList.remove('leaving');
   }
 }
 // Closing the book puts the model back where it was.
@@ -10394,7 +10398,7 @@ async function openReader(name, title, model, lift){
       while (gen === RD.gen && performance.now() - t0 < 1500 && !at.every(rdReady)) await new Promise(r => setTimeout(r, 60));
       await flyLand(gen);
       await new Promise(r => setTimeout(r, 250));
-      if (gen === RD.gen && RD.spread === -1 && !RD.turn) rdRigid(-1, saved, 'turn');
+      if (gen === RD.gen && RD.spread === -1 && !RD.turn && !FL.leaving && !FL.active) rdRigid(-1, saved, 'turn');
     } else {
       RD.spread = saved;
       RD.W = 0; readerLayout(); readerPagesText(); drawReader();
