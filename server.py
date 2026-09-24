@@ -103,10 +103,13 @@ take the colour of the cover. The size starts out as the photos suggest; type it
 change it. Choose plain, gilt, gilt-top or sprinkled page edges and a rounded or flat spine,
 watch the preview, and Make model saves it in journal/models, next to the photo on the right.
 Scroll over the photo to zoom in on it (drag the photo to move about; Fit shows it whole again).
-More photos can go on the inside of the boards (only the edge showing above the page edges is
-seen; the one photo does for both), on the outer edges of the boards (one photo of a stretch of
+More photos can go on the inside of the boards: the endpapers, seen whole beside the first and last
+pages as the book is read (the one photo does for both); on the outer edges of the boards (one photo of a stretch of
 edge, repeated along all six at its true size, which Edge pattern can make larger or smaller),
 and on the headcap and tailcap, which then reach a little way in over the pages.
+Paper sets what the pages are printed on as the book is read: white, cream, aged, laid or
+handmade, or a photo of real paper chosen on the Paper tab (it's stretched over each page, under
+the print, which stays as dark as it is).
 Raised bands (1 to 5) can be put across the spine. They start evenly spaced and can be moved,
 with their sliders or by dragging them on the spine's photo.
 Save draft keeps the book as it is so far in journal/book drafts, shown on the right of the
@@ -4650,6 +4653,7 @@ body:not(.can-bring-back) .arch-model-add{display:none}
         <button class="tab" type="button" role="tab" data-face="back">Back</button>
         <button class="tab" type="button" role="tab" data-face="pages">Page edges</button>
         <button class="tab" type="button" role="tab" data-face="inside">Inside</button>
+        <button class="tab" type="button" role="tab" data-face="leaf">Paper</button>
         <button class="tab" type="button" role="tab" data-face="boardEdges">Board edges</button>
         <button class="tab" type="button" role="tab" data-face="headcap">Headcap</button>
         <button class="tab" type="button" role="tab" data-face="tailcap">Tailcap</button>
@@ -4677,6 +4681,7 @@ body:not(.can-bring-back) .arch-model-add{display:none}
         <p class="book-hint">Any units: only the proportions matter. They start out as the photos suggest.</p>
         <div class="book-size">
           <label>Page edges <select id="bookEdges"><option value="plain">Plain</option><option value="gilt">Gilt</option><option value="giltTop">Gilt top</option><option value="red">Sprinkled red</option><option value="photo" id="bookEdgesPhoto" disabled>From the photo</option></select></label>
+          <label title="The paper the pages are printed on, seen as the book is read">Paper <select id="bookLeaf"><option value="white">White</option><option value="cream">Cream</option><option value="aged">Aged</option><option value="laid">Laid</option><option value="rough">Handmade</option><option value="photo" id="bookLeafPhoto" disabled>From the photo</option></select></label>
           <label>Spine <select id="bookSpine"><option value="round">Rounded</option><option value="flat">Flat</option></select></label>
           <label>Bands <select id="bookBands"><option value="0">None</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option></select></label>
         </div>
@@ -9893,10 +9898,10 @@ async function loadBookLook(model){
     if ((json.materials[p.material] || {}).name === 'front') aspect = (a.max[0] - a.min[0]) / (a.max[1] - a.min[1]);
   }
   if (!(aspect > 0.1 && aspect < 5)) return null;
-  const [front, back, insideL, insideR, endpaper, board, edges] = await Promise.all(
-    ['front', 'back', 'insideFront', 'insideBack', 'endpaper', 'board', 'edges'].map(mat));
+  const [front, back, insideL, insideR, endpaper, board, edges, paper] = await Promise.all(
+    ['front', 'back', 'insideFront', 'insideBack', 'endpaper', 'board', 'edges', 'leaf'].map(mat));
   return {aspect, thick:Math.max(0.01, z1 - z0), front:front || board, back:back || front || board,
-    insideL:insideL || endpaper || board, insideR:insideR || endpaper || board, board, edges};
+    insideL:insideL || endpaper || board, insideR:insideR || endpaper || board, board, edges, paper};
 }
 
 /* Taking a book up to read it. The model itself (drawn by the shared WebGL canvas, over the whole screen) floats
@@ -10350,7 +10355,8 @@ async function readerRender(p){
   const page = await doc.getPage(p), vp1 = page.getViewport({scale:1});
   const fit = Math.min(RD.W / vp1.width, RD.H / vp1.height), vp = page.getViewport({scale:fit * RD.dpr});
   const c = document.createElement('canvas'); c.width = Math.max(1, Math.ceil(vp.width)); c.height = Math.max(1, Math.ceil(vp.height));
-  await page.render({canvas:c, canvasContext:c.getContext('2d'), viewport:vp, background:READER_PAPER}).promise;
+  const paper = RD.look && RD.look.paper;
+  await page.render({canvas:c, canvasContext:c.getContext('2d'), viewport:vp, background:paper ? '#FFFFFF' : READER_PAPER}).promise;
   page.cleanup();
   if (doc !== RD.doc) return;
   if (pgen === RD.pgen || !RD.cache.has(p)) RD.cache.set(p, {canvas:c, ratio:vp1.width / vp1.height, pgen});
@@ -10368,6 +10374,12 @@ function clipPoly(poly, f){
   }
   return out;
 }
+// The paper the pages are printed on: the book's own (its model's Paper), or the reader's plain paper.
+function rdPaper(c, x, y, w, h){
+  const p = RD.look && RD.look.paper;
+  if (p && p.img) c.drawImage(p.img, x, y, w, h);
+  else { c.fillStyle = p && p.colour || READER_PAPER; c.fillRect(x, y, w, h); }
+}
 // A picture or a colour from the book, filling a rectangle.
 function rdFill(c, m, x, y, w, h, fallback){
   if (m && m.img) c.drawImage(m.img, x, y, w, h);
@@ -10376,12 +10388,17 @@ function rdFill(c, m, x, y, w, h, fallback){
 // One page, laid flat with its left edge at x (0 for the left page, W for the right).
 function rdPage(c, p, x){
   const W = RD.W, H = RD.H;
-  c.fillStyle = READER_PAPER; c.fillRect(x, 0, W, H);
+  rdPaper(c, x, 0, W, H);
   const e = RD.cache.get(p);
   if (e) {
     let w = W, h = W / e.ratio;
     if (h > H) { h = H; w = H * e.ratio; }
+    // On the book's own paper, the page is laid over it so that its white takes on the paper and its print stays
+    // as dark as it is (it's drawn on white for that).
+    const paper = RD.look && RD.look.paper;
+    if (paper) { c.save(); c.globalCompositeOperation = 'multiply'; }
     c.drawImage(e.canvas, x + (W - w) / 2, (H - h) / 2, w, h);
+    if (paper) c.restore();
   } else {
     c.fillStyle = 'rgba(30,39,35,.3)'; c.font = 'italic ' + Math.round(Math.max(11, H * 0.028)) + 'px Spectral, Georgia, serif';
     c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(String(p), x + W / 2, H / 2);
@@ -10531,14 +10548,14 @@ function drawReader(){
   const flap = lifted.map(refl);
   if (flap.length > 2) {
     c.save(); c.shadowColor = 'rgba(0,0,0,.32)'; c.shadowBlur = 16 * dpr;
-    polyPath(c, flap); c.fillStyle = READER_PAPER; c.fill(); c.restore();
+    polyPath(c, flap); c.fillStyle = RD.look && RD.look.paper && RD.look.paper.colour || READER_PAPER; c.fill(); c.restore();
     c.save(); polyPath(c, flap); c.clip();
     // The back of the page lies flat on the other side once turned (the page mirrored across the spine);
     // on its way over, that's mirrored again across the fold.
     const a = 1 - 2 * n.x * n.x, b = -2 * n.x * n.y, d = 1 - 2 * n.y * n.y, m = 2 * (M.x * n.x + M.y * n.y);
     c.transform(a, b, b, d, m * n.x, m * n.y);
     c.transform(-1, 0, 0, 1, 2 * W, 0);
-    if (back >= 1 && back <= RD.n) rdPage(c, back, xo); else { c.fillStyle = READER_PAPER; c.fillRect(xo, 0, W, H); }
+    if (back >= 1 && back <= RD.n) rdPage(c, back, xo); else rdPaper(c, xo, 0, W, H);
     c.setTransform(...base);
     // The paper curving over: shaded at the fold, catching the light just past it.
     const reach = Math.max(4, ...flap.map(side)), g = c.createLinearGradient(M.x, M.y, M.x + n.x * reach, M.y + n.y * reach);
@@ -11896,14 +11913,15 @@ $('delForever').addEventListener('click', onDeleteForever);
    overhang the page block a little, the spine is gently rounded (or flat), and the page edges are plain,
    gilt or sprinkled red. The proportions come from the photos and can be set by hand. Nothing is
    downloaded: the model is made in the page, saved in journal/models and shown on the right. */
-const BOOK_FACES = ['front', 'spine', 'back', 'pages', 'inside', 'boardEdges', 'headcap', 'tailcap'];
-const BOOK_NAMES = {front:'Front', spine:'Spine', back:'Back', pages:'Page edges', inside:'Inside',
+const BOOK_FACES = ['front', 'spine', 'back', 'pages', 'inside', 'leaf', 'boardEdges', 'headcap', 'tailcap'];
+const BOOK_NAMES = {front:'Front', spine:'Spine', back:'Back', pages:'Page edges', inside:'Inside', leaf:'Paper',
   boardEdges:'Board edges',
   headcap:'Headcap', tailcap:'Tailcap'};
 // Raised bands across the spine: where each is, as a fraction of the way down from the head. They start out
 // evenly spaced, and each can be moved.
 const evenBands = n => Array.from({length:n}, (_, i) => (i + 1) / (n + 1));
-const book = {entry:null, draft:null, face:'front', faces:{}, dims:{h:20, w:14, t:3, manual:false}, edges:'plain', round:true, bands:[], rimScale:1,
+const BOOK_LEAVES = ['white', 'cream', 'aged', 'laid', 'rough', 'photo'];
+const book = {entry:null, draft:null, face:'front', faces:{}, dims:{h:20, w:14, t:3, manual:false}, edges:'plain', leaf:'white', round:true, bands:[], rimScale:1,
   timer:0, busy:false, drag:null, view:null, seq:0};
 const emptyBookFace = () => ({pic:null, data:null, quad:null, rot:0, extra:[[], [], [], []], zoom:{s:1, px:0, py:0}});
 function bookFace(){ return book.faces[book.face]; }
@@ -12045,6 +12063,62 @@ function edgeTexture(kind){
   return cv;
 }
 
+/* The paper of the pages, made up (a page's worth, the shape of the page, stretched over each): cream, aged
+   (yellowed, darker towards the edges, with a few foxing spots), laid (the fine lines and the chain lines of a
+   laid mould), or handmade (rough, with fibres). Made the same way every time. */
+const leafMade = new Map();
+function leafTexture(kind, aspect){
+  const W = 768, H = Math.max(256, Math.min(2048, Math.round(W / Math.max(0.3, aspect)))), key = kind + ':' + H;
+  if (leafMade.has(key)) return leafMade.get(key);
+  let seed = 11; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  // Soft blotches: a few random tones, spread smoothly over the page.
+  const cloud = (cols, rows) => {
+    const small = document.createElement('canvas'); small.width = cols; small.height = rows;
+    const sx = small.getContext('2d'), sd = sx.createImageData(cols, rows);
+    for (let i = 0; i < cols * rows; i++) { const v = rnd() * 255; sd.data.set([v, v, v, 255], i * 4); }
+    sx.putImageData(sd, 0, 0);
+    const big = document.createElement('canvas'); big.width = W; big.height = H;
+    const bx = big.getContext('2d'); bx.imageSmoothingQuality = 'high'; bx.drawImage(small, 0, 0, W, H);
+    return bx.getImageData(0, 0, W, H).data;
+  };
+  const base = {cream:[243, 235, 214], aged:[234, 218, 184], laid:[244, 240, 228], rough:[240, 235, 224]}[kind] || [251, 250, 246];
+  const big = cloud(6, 8), mid = cloud(24, 32);
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const x = cv.getContext('2d'), img = x.createImageData(W, H), d = img.data;
+  const chain = Math.round(W / 14);
+  for (let y = 0; y < H; y++) for (let i = 0; i < W; i++) {
+    const k = (y * W + i) * 4, b = (big[k] / 255 - 0.5), m = (mid[k] / 255 - 0.5), grain = rnd() - 0.5;
+    let v = 0, warm = 0;
+    if (kind === 'cream') v = b * 6 + m * 3 + grain * 5;
+    else if (kind === 'aged') {
+      const ex = Math.min(i, W - 1 - i) / W, ey = Math.min(y, H - 1 - y) / H, edge = Math.max(0, 0.12 - Math.min(ex, ey)) / 0.12;
+      v = b * 16 + m * 7 + grain * 6 - edge * edge * 26; warm = edge * edge * 10 + Math.max(0, -b) * 8;
+    } else if (kind === 'laid') {
+      v = b * 4 + m * 2 + grain * 4 + (y % 3 === 0 ? -4 : 1);
+      const c = i % chain; if (c < 2) v -= 5;
+    } else if (kind === 'rough') v = b * 8 + m * 8 + grain * 16;
+    d[k] = base[0] + v; d[k + 1] = base[1] + v - warm * 0.4; d[k + 2] = base[2] + v - warm; d[k + 3] = 255;
+  }
+  x.putImageData(img, 0, 0);
+  if (kind === 'aged') {   // foxing: a few small brown spots
+    for (let n = 0; n < 26; n++) {
+      const cx = rnd() * W, cy = rnd() * H, r = 1.5 + rnd() * 6, g = x.createRadialGradient(cx, cy, 0, cx, cy, r);
+      g.addColorStop(0, 'rgba(150,100,50,' + (0.18 + rnd() * 0.25) + ')'); g.addColorStop(1, 'rgba(150,100,50,0)');
+      x.fillStyle = g; x.fillRect(cx - r, cy - r, 2 * r, 2 * r);
+    }
+  }
+  if (kind === 'rough') {   // fibres
+    x.lineCap = 'round';
+    for (let n = 0; n < 900; n++) {
+      const cx = rnd() * W, cy = rnd() * H, a = rnd() * Math.PI, l = 4 + rnd() * 14;
+      x.strokeStyle = 'rgba(120,105,80,' + (0.05 + rnd() * 0.08) + ')'; x.lineWidth = 0.6 + rnd() * 0.6;
+      x.beginPath(); x.moveTo(cx, cy); x.quadraticCurveTo(cx + Math.cos(a) * l / 2 + rnd() * 3, cy + Math.sin(a) * l / 2, cx + Math.cos(a) * l, cy + Math.sin(a) * l); x.stroke();
+    }
+  }
+  leafMade.set(key, cv);
+  return cv;
+}
+
 /* The book's shape. Units don't matter (the viewer scales every model to fit); the height is 1.
    Up is +Y, the front cover faces +Z, and the spine is at -X, as when you hold a book to read it. */
 function bookGeometry(p){
@@ -12093,6 +12167,15 @@ function bookGeometry(p){
     return f === 'px' ? [(py1 - y) / (2 * py1) * reps, across] : [(x - xl) / (px1 - xl) * reps, across];
   };
   box(xl, px1, -py1, py1, -zi, zi, {px:'edges', py:p.edges === 'giltTop' ? 'giltEdge' : 'edges', ny:'edges'}, edgeUv);
+  // The paper of the pages, on the two faces of the page block that the boards lie on, just under them: seen only
+  // once the book is open, as it's read (the reader lays the PDF's pages on it).
+  if (p.leaf) {
+    const zl = Math.max(zi * 0.5, zi - 0.004);
+    for (const back of [false, true]) {
+      const z = back ? -zl : zl, pts = [[xl, -py1, z], [px1, -py1, z], [px1, py1, z], [xl, py1, z]];
+      quad('leaf', pts, [0, 0, back ? -1 : 1], pts.map(([x, y]) => [back ? (px1 - x) / (px1 - xl) : (x - xl) / (px1 - xl), (py1 - y) / (2 * py1)]));
+    }
+  }
   // The spine: an arc from the back board round to the front, carrying the spine photo, closed at head and tail.
   const N = p.round ? 20 : 2, sp = g('spine'), sb = sp.pos.length / 3;
   const arc = [];
@@ -12234,15 +12317,17 @@ async function buildBookGlb(maxSide){
     insideBack:img.inside ? {tex:'insideBack'} : {colour:endpaper},
     rim:img.boardEdges ? {tex:'boardEdges'} : {colour:dark(board)},
     edges:{tex:book.edges === 'photo' && img.pages ? 'pages' : book.edges === 'gilt' ? 'gilt' : book.edges === 'red' ? 'red' : 'paper'},
-    giltEdge:{tex:'gilt'}};
+    giltEdge:{tex:'gilt'},
+    leaf:book.leaf === 'photo' && img.leaf ? {tex:'leaf'} : book.leaf === 'white' || book.leaf === 'photo' ? {colour:[251, 250, 246]} : {tex:'leaf-' + book.leaf}};
   const groups = bookGeometry({h:book.dims.h, w:book.dims.w, t:book.dims.t, round:book.round, edges:img.pages && book.edges === 'photo' ? 'photo' : book.edges,
     inside:!!img.inside, bands:book.bands,
     rim:img.boardEdges ? {aspect:img.boardEdges.width / img.boardEdges.height, scale:book.rimScale} : null,
-    head:!!img.headcap, tail:!!(img.tailcap || img.headcap)});
+    head:!!img.headcap, tail:!!(img.tailcap || img.headcap), leaf:true});
   // Only the pictures the model's parts actually use go into the file.
   const used = new Set(Object.entries(materials).filter(([name]) => groups.has(name)).map(([, m]) => m.tex).filter(Boolean)), images = [];
   for (const [k, cv] of Object.entries(img)) if (used.has(k)) images.push([k, await canvasJpeg(cv, 0.9)]);
   for (const k of ['paper', 'gilt', 'red']) if (used.has(k)) images.push([k, await canvasJpeg(edgeTexture(k), 0.85)]);
+  for (const k of BOOK_LEAVES) if (used.has('leaf-' + k)) images.push(['leaf-' + k, await canvasJpeg(leafTexture(k, book.dims.w / book.dims.h), 0.88)]);
   return writeGlb(groups, materials, images);
 }
 
@@ -12252,12 +12337,13 @@ async function openBookMaker(picture, draft){
   const e = entries.get(currentId); if (!e) return;
   const d = draft ? draft.data || {} : null;
   book.entry = currentId; book.draft = draft ? draft.code : null; book.face = 'front';
-  book.dims = {h:20, w:14, t:3, manual:false}; book.edges = 'plain'; book.round = true; book.bands = []; book.rimScale = 1;
+  book.dims = {h:20, w:14, t:3, manual:false}; book.edges = 'plain'; book.leaf = 'white'; book.round = true; book.bands = []; book.rimScale = 1;
   for (const k of BOOK_FACES) book.faces[k] = emptyBookFace();
   if (d) {
     const dm = d.dims || {}, ok = v => typeof v === 'number' && v > 0;
     if (ok(dm.h) && ok(dm.w) && ok(dm.t)) book.dims = {h:dm.h, w:dm.w, t:dm.t, manual:!!dm.manual};
     if (['plain', 'gilt', 'giltTop', 'red', 'photo'].includes(d.edges)) book.edges = d.edges;
+    if (BOOK_LEAVES.includes(d.leaf)) book.leaf = d.leaf;
     book.round = d.round !== false;
     if (Array.isArray(d.bands) && d.bands.length <= 5 && d.bands.every(v => typeof v === 'number' && v > 0 && v < 1))
       book.bands = d.bands.slice();
@@ -12270,6 +12356,7 @@ async function openBookMaker(picture, draft){
   }
   $('bookEdges').value = book.edges === 'photo' ? 'plain' : book.edges; $('bookSpine').value = book.round ? 'round' : 'flat';
   $('bookBands').value = String(book.bands.length); showBookBands(); $('bookEdgesPhoto').disabled = true;
+  $('bookLeaf').value = book.leaf === 'photo' ? 'white' : book.leaf; $('bookLeafPhoto').disabled = true;
   $('bookDiscard').hidden = !book.draft; disarm($('bookDiscard'), 'Discard draft');
   M3.states.delete('book-preview');
   $('bookDialog').showModal();
@@ -12279,7 +12366,8 @@ async function openBookMaker(picture, draft){
   if (saved.length) {
     await Promise.all(saved.map(k => setBookPicture(k, d.faces[k].pic, d.faces[k])));
     if (book.edges === 'photo' && !book.faces.pages.data) book.edges = 'plain';
-    $('bookEdges').value = book.edges;
+    if (book.leaf === 'photo' && !book.faces.leaf.data) book.leaf = 'white';
+    $('bookEdges').value = book.edges; $('bookLeaf').value = book.leaf;
   } else if (picture) await setBookPicture('front', picture);
   else { showBookDims(); showBookPreview(); }
 }
@@ -12296,6 +12384,7 @@ async function setBookPicture(face, picture, saved){
   const f = book.faces[face];
   Object.assign(f, emptyBookFace(), {pic:picture});
   if (face === 'pages' && !saved) pagesPhoto(!!picture);
+  if (face === 'leaf' && !saved) leafPhoto(!!picture);
   showBookFace();
   if (!picture) { bookChanged(); return; }
   try {
@@ -12316,6 +12405,7 @@ async function setBookPicture(face, picture, saved){
       f.quad = [[mx, my], [cv.width - mx, my], [cv.width - mx, cv.height - my], [mx, cv.height - my]];
     }
     if (face === 'pages') $('bookEdgesPhoto').disabled = false;
+    if (face === 'leaf') $('bookLeafPhoto').disabled = false;
   } catch (err) { f.pic = null; setStatus("That picture couldn't be read.", true); }
   showBookFace(); bookChanged();
 }
@@ -12325,16 +12415,24 @@ function pagesPhoto(on){
   if (on) book.edges = 'photo'; else if (book.edges === 'photo') book.edges = 'plain';
   $('bookEdges').value = book.edges;
 }
+// A photo of a page's paper goes on the pages in place of the paper chosen under Paper.
+function leafPhoto(on){
+  $('bookLeafPhoto').disabled = !on;
+  if (on) book.leaf = 'photo'; else if (book.leaf === 'photo') book.leaf = 'white';
+  $('bookLeaf').value = book.leaf;
+}
 // What to choose for each side, when it has no photo yet, and what to do with the photo once it has.
 const BOOK_NOTES = {
   front:'Choose a photo of the front cover from the pictures below.',
   pages:'Choose a photo of the page edges below, to put on the head, fore-edge and tail. Without one, they\u2019re as set under Page edges.',
-  inside:'Choose a photo of the inside of a board, opened out, with its turn-ins. It goes inside both boards; only its outer edge shows, above the page edges at the head, fore-edge and tail. Without one, it\u2019s plain endpaper.',
+  inside:'Choose a photo of the inside of a board, opened out, with its turn-ins: the endpaper (marbled, patterned or plain). It goes inside both boards, and is seen whole as the book is read, beside the first and last pages. Without one, it\u2019s plain endpaper.',
+  leaf:'Choose a photo of a blank page (or any paper), to be the paper the book\u2019s pages are printed on as it\u2019s read: it\u2019s stretched over each page, under the print. Without one, the paper is as set under Paper.',
   boardEdges:'Choose a photo of the edge of a board (its narrow outer edge, where the gilt roll or the leather\u2019s edge is). A short stretch is enough: it\u2019s repeated along the head, fore-edge and tail of both boards. Without one, they\u2019re the colour of the cover.',
   headcap:'Choose a photo of the head of the spine, seen from above. Without one, it\u2019s the colour of the spine.',
   tailcap:'Choose a photo of the tail of the spine, seen from below. Without one, the headcap\u2019s photo is used (or the colour of the spine).'};
 const BOOK_HINTS = {
   pages:'Drag the corners onto the edges of the pages, then Turn it until the lines of the pages run from side to side.',
+  leaf:'Drag the corners onto the corners of the page (or round the stretch of paper to use), and Turn it until its top is marked Top. Whole photo uses all of it.',
   inside:'Drag the corners onto the corners of the board, and Turn it until the top is marked Top: the spine should be on the right, as when the book lies open.',
   boardEdges:'Drag the corners tightly round a stretch of the edge (just its depth, nothing above or below), and Turn it until it runs from side to side, with the outside of the board marked Top.',
   headcap:'Drag the corners round the end of the spine, and Turn it until the outside of the spine is marked Top.',
@@ -12632,6 +12730,7 @@ for (const id of ['bookH', 'bookW', 'bookT']) $(id).addEventListener('input', ()
 });
 $('bookFromPhotos').addEventListener('click', () => { book.dims.manual = false; bookChanged(); });
 $('bookEdges').addEventListener('change', () => { book.edges = $('bookEdges').value; bookChanged(); });
+$('bookLeaf').addEventListener('change', () => { book.leaf = $('bookLeaf').value; bookChanged(); });
 $('bookSpine').addEventListener('change', () => { book.round = $('bookSpine').value === 'round'; bookChanged(); });
 // Anything changed: the preview follows a moment later.
 function bookChanged(){
@@ -12682,7 +12781,7 @@ function bookDraftData(){
     const f = book.faces[k]; if (!f.pic) continue;
     faces[k] = f.data ? {pic:f.pic, quad:f.quad, rot:f.rot, extra:f.extra, w:f.data.width, h:f.data.height} : {pic:f.pic};
   }
-  return {entry:book.entry, saved:Date.now(), face:book.face, faces, dims:Object.assign({}, book.dims), edges:book.edges, round:book.round, bands:book.bands.slice(), rimScale:book.rimScale};
+  return {entry:book.entry, saved:Date.now(), face:book.face, faces, dims:Object.assign({}, book.dims), edges:book.edges, leaf:book.leaf, round:book.round, bands:book.bands.slice(), rimScale:book.rimScale};
 }
 $('bookDraft').addEventListener('click', async () => {
   const id = book.entry, e = entries.get(id), btn = $('bookDraft'); if (!e || book.busy) return;
