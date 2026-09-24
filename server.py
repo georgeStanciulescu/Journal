@@ -9282,6 +9282,8 @@ function shelfModelItem(ref){
     read.textContent = 'Read'; read.title = 'Open the book and read it';
     read.addEventListener('click', () => readBook(name, canvas));
     bar.querySelector('.side-open-btn').before(read);
+    // The page reader got ready beforehand, when nothing else is happening, rather than while the book rises.
+    if (!pdfjsLib) (window.requestIdleCallback || setTimeout)(() => loadPdfjs().catch(() => {}), {timeout:4000});
     item.classList.add('shelf-book'); item.setAttribute('aria-label', 'Book: ' + title);
   }
   wireShelfItem(item, bar);
@@ -9904,6 +9906,7 @@ function unbindBook(model){
 }
 // from: the canvas the model is showing in, for the book to be taken up from there.
 function readBook(model, from){
+  if (FL.leaving) return;   // (still on its way back to its place)
   const e = entries.get(currentId), pdf = bookPdf(e, model);
   if (pdf) openReader(pdf, pdfTitleIn(e.body, pdf) || 'Book', model, from ? bookLift(model, from) : null);
 }
@@ -10039,16 +10042,21 @@ function flyBook(lift){
   const far = Math.hypot(to.x - lift.x, to.y - lift.y), ms = Math.max(750, Math.min(1100, 650 + far * 0.35));
   // Every view of it goes (on the right as well as the large view it may have come from): the book is in your hands.
   const hid = [lift.from, ...[...M3.views].filter(v => v.name === lift.name && v.canvas !== lift.from).map(v => v.canvas)];
-  Object.assign(FL, {active:true, hid, lift, to, landed:false, arrived:new Promise(r => FL.arrive = r)});
+  Object.assign(FL, {active:true, hid, lift, to, landed:false, t:0, ms, arrived:new Promise(r => FL.arrive = r)});
   for (const c of hid) c.style.visibility = 'hidden';
   const cv = $('readerFlight'); cv.hidden = false; cv.classList.remove('landing', 'entering');
-  const t0 = performance.now();
+  // Its first frame now, where it lies, while the reader is still being set up (the canvases made the size of the
+  // screen, and so on); it moves from the next. And a frame that's late only holds it back a little: it doesn't
+  // leap ahead, so however long the first frames take, it rises smoothly.
+  flyFrame(lift, to, 0, 0);
+  let clock = 0, prev = 0;
   const step = now => {
     FL.raf = 0;
     if (!FL.active) return;
-    const t = Math.min(1, (now - t0) / ms);
+    clock += prev ? Math.min(now - prev, 34) : 0; prev = now;
+    const t = Math.min(1, clock / ms);
     FL.t = t; FL.ms = ms;
-    flyFrame(lift, to, t, t < 1 ? 0 : now - t0 - ms);
+    flyFrame(lift, to, t, t < 1 ? 0 : clock - ms);
     if (t >= 1 && FL.arrive) { FL.arrive(); FL.arrive = null; }
     if (!FL.landed) FL.raf = requestAnimationFrame(step);
   };
@@ -10138,9 +10146,10 @@ function flyBackFrom(lift, to, t, ms, gen){
 async function closeBook(){
   const dlg = $('bookReader');
   if (FL.leaving) return;
-  // The model comes back in the same moment as the reader (and the book flying in it) goes: its 'close' event
-  // comes a little after, and a frame could be shown between, with the book nowhere.
-  const shut = () => { flyStop(); if (dlg.open) dlg.close(); };
+  // The model comes back in the same moment as the reader (and the book flying in it) goes, and the reader lets
+  // go of the book then: its 'close' event comes a little after, and a frame could be shown between, with the
+  // book nowhere (or a page just drawn could show it again).
+  const shut = () => { closeReaderDoc(); if (dlg.open) dlg.close(); };
   // Closed while it's still on its way up: it goes back from where it's got to.
   if (FL.active && !FL.landed && FL.lift && FL.to) {
     const gen = RD.gen, lift = FL.lift, to = FL.to, t = FL.t;
@@ -10440,7 +10449,8 @@ function closeReaderDoc(){
   flyStop();
   RD.b3 = null; RD.v3 = false; clearTimeout(RD.v3Timer);
   RD.gen++; RD.pgen++;
-  if (RD.task) RD.task.destroy().catch(() => {});
+  // (one still loading is let go of once it's loaded: stopped halfway, pdf.js complains)
+  if (RD.task) { const task = RD.task, end = () => task.destroy().catch(() => {}); if (RD.doc) end(); else task.promise.then(end, end); }
   RD.task = RD.doc = RD.look = RD.model = RD.target = null; RD.n = RD.skip = RD.pdfN = 0; RD.ends = false; RD.cache.clear(); RD.keep.clear(); RD.next = []; RD.queue = []; RD.turn = null; RD.open = false;
   if (RD.raf) { cancelAnimationFrame(RD.raf); RD.raf = 0; }
 }
@@ -10506,6 +10516,10 @@ async function readerPump(){
     while (RD.doc && RD.queue.length) {
       const p = RD.queue.shift();
       if ((RD.cache.get(p) || {}).pgen === RD.pgen) continue;
+      // Not while the book is still rising (drawing a page holds everything else up): the pages it opens at from
+      // halfway up, and those it's to be leafed through to once it's there.
+      while (RD.doc && FL.active && !FL.landed && !FL.leaving && (FL.t < 0.5 || (FL.t < 1 && RD.keep.has(p))))
+        await new Promise(r => setTimeout(r, 40));
       try { await readerRender(p); } catch (err) { /* a page that can't be drawn stays blank */ }
     }
   } finally { RD.busy = false; }
