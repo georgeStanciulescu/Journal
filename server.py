@@ -83,7 +83,8 @@ endpapers opens at them: the endpaper pasted inside the board, and the free endp
 whose plain back comes before the first page (and the same at the end). Closing it (Close, or
 Escape) shuts the nearer cover (the front one in the first half of the book, the back one past
 the middle) and floats the book back to where it was taken from. Turned back past the
-first page, or on past the last, the book closes again. The model's Open view can take the PDF
+first page, or on past the last, the book closes again. How fast pages and covers turn is set in the Menu (Reading books,
+Page turning speed); a click or key press while a page is still going over turns the next one once it lands. The model's Open view can take the PDF
 out again (the PDF itself stays where it is). The pages are drawn by pdf.js (from Mozilla, the same that draws PDFs in Firefox), which
 the journal downloads once from the npm registry into journal/pdfjs and checks against its
 known fingerprint; after that it needs no internet connection.
@@ -205,7 +206,7 @@ SETTING_KEYS = {"freezeKey", "indentKey", "logKey", "shotKey"}   # keyboard shor
 SETTING_RANGES = {"brandSize": (14, 60), "titleSize": (18, 80), "bodySize": (12, 36), "imgBorder": (0, 8), "zoomLevel": (1.5, 12), "shelfHeight": (150, 800),
                   "subSize": (12, 60), "shelfScale": (25, 100),
                   "topicSize": (10, 48), "listTopicSize": (8, 28), "boldAmount": (1, 8), "underlineThick": (1, 8),
-                  "taskScale": (50, 250), "taskMenuScale": (50, 250),
+                  "taskScale": (50, 250), "taskMenuScale": (50, 250), "turnSpeed": (25, 200),
                   # the PDF export (sizes in points; the picture as a % of the page's height)
                   "exportBody": (6, 16), "exportMark": (2, 12), "exportNote": (4, 16), "exportNoteName": (4, 24), "exportPicture": (15, 90)}
 SETTING_CHOICES = {"listSort": {"recent", "changes", "topic"},   # how the list of entries is shown
@@ -4629,6 +4630,10 @@ body:not(.can-bring-back) .arch-model-add{display:none}
     <h3 id="zoomSetTitle">Zoom and pictures on the right</h3>
     <div id="zoomRows"></div>
   </section>
+  <section aria-labelledby="readSetTitle">
+    <h3 id="readSetTitle">Reading books</h3>
+    <div id="readRows"></div>
+  </section>
   <section aria-labelledby="logSetTitle">
     <h3 id="logSetTitle">Log</h3>
     <div id="logRows"></div>
@@ -7320,6 +7325,8 @@ const SIZE_SETTINGS = [
    title:'The linked entry\u2019s name, in front of its writing at the end of the PDF'},
   {key:'exportPicture', label:'Picture height', min:15, max:90, def:33, unit:'% of a page', box:'exportRows',
    title:'How tall each picture is in the PDF (a very wide one is made narrower to fit the page, so it comes out a little shorter)'},
+  {key:'turnSpeed', label:'Page turning speed', min:25, max:200, step:5, def:100, unit:'%', box:'readRows',
+   title:'How fast pages and covers turn when you read a book: lower is slower, 100% as it was made'},
   {key:'taskMenuScale', label:'Task size in the Tasks menu', cssVar:'--task-menu-scale', css:v => v / 100, min:50, max:250, step:5, def:100, unit:'%', box:'taskRows',
    title:'The size of tasks as they appear in the Tasks menu'},
 ];
@@ -9866,7 +9873,7 @@ $('pdfView').addEventListener('close', () => {
    the last, its back cover closes over. A cover doesn't bend: it swings round the spine, its far edge coming
    nearer (so larger) as it stands up. The open book is then "spread" 0 to K; closed at the front it's -1, and
    closed at the back K + 1. */
-const RD = {doc:null, task:null, name:'', model:null, look:null, n:0, spread:0, target:null, keep:new Set(), aspect:0.7, W:0, H:0, ox:0, oy:0, dpr:1,
+const RD = {doc:null, task:null, name:'', model:null, look:null, n:0, spread:0, target:null, keep:new Set(), next:[], aspect:0.7, W:0, H:0, ox:0, oy:0, dpr:1,
   shift:0, cache:new Map(), queue:[], busy:false, gen:0, pgen:0, turn:null, raf:0, open:false, faceA:null, faceB:null,
   b3:null, g3:null, v3:false, v3At:0, v3Timer:0,
   skip:0, pdfN:0, ends:false};   // the PDF's pages left out at the start (a book's cover), how many are read, and endpaper leaves (rdSrc)   // the book's model, drawn in 3D while it's closed or a cover swings (rd3Draw)
@@ -10154,7 +10161,7 @@ async function closeBook(){
   const lift0 = FL.lift, name = lift0 && lift0.name;
   const target = name && [lift0.from, ...FL.hid].find(c => c && c.isConnected && c.getBoundingClientRect().width > 3);
   if (!target || FL.active || !RD.doc) { shut(); return; }
-  FL.leaving = true;
+  FL.leaving = true; RD.next = [];
   const gen = RD.gen, K = lastSpread();
   try {
     // Shut: a cover on its way open goes back the way it came; one on its way shut carries on; and from an open
@@ -10434,7 +10441,7 @@ function closeReaderDoc(){
   RD.b3 = null; RD.v3 = false; clearTimeout(RD.v3Timer);
   RD.gen++; RD.pgen++;
   if (RD.task) RD.task.destroy().catch(() => {});
-  RD.task = RD.doc = RD.look = RD.model = RD.target = null; RD.n = RD.skip = RD.pdfN = 0; RD.ends = false; RD.cache.clear(); RD.keep.clear(); RD.queue = []; RD.turn = null; RD.open = false;
+  RD.task = RD.doc = RD.look = RD.model = RD.target = null; RD.n = RD.skip = RD.pdfN = 0; RD.ends = false; RD.cache.clear(); RD.keep.clear(); RD.next = []; RD.queue = []; RD.turn = null; RD.open = false;
   if (RD.raf) { cancelAnimationFrame(RD.raf); RD.raf = 0; }
 }
 // The book as large as fits, and the canvas at the screen's own sharpness.
@@ -10802,6 +10809,10 @@ function rdTick(now){
       if (t.kind === 'rigid' && RD.v3) drawReader();   // the model lying just so, for the reader's own drawing to take over from
       RD.turn = null; more = false;
       if (a.done === 'turn' || t.kind === 'rigid') rdFinish(t);
+      // a turn asked for while this one went over comes next
+      const next = RD.next.shift();
+      if (next && RD.doc && !FL.leaving && !FL.active) { rdTurn(next); if (RD.turn) return; }
+      RD.next = [];
     }
   } else if (t.kind === 'curl') {
     const g = rdClamp(t, t.goal), f = t.mode === 'drag' ? 0.5 : 0.22;
@@ -10816,16 +10827,18 @@ function rdTick(now){
 }
 const rdKick = () => { if (!RD.raf) RD.raf = requestAnimationFrame(rdTick); };
 // A page goes over (done 'turn') or falls back ('back') by itself, lifting a little on the way.
+// (as fast as the Menu's page turning speed has it)
+const rdPace = () => Math.max(0.25, Math.min(2, (settings.turnSpeed || 100) / 100));
 function rdAnimate(t, done){
-  const over = done === 'turn';
+  const over = done === 'turn', pace = rdPace();
   t.mode = 'anim';
   if (t.kind === 'rigid') {
     const to = over ? 1 : 0;
-    t.anim = {from:t.p, to, t0:performance.now(), dur:Math.max(200, 1100 * Math.abs(to - t.p)), done};
+    t.anim = {from:t.p, to, t0:performance.now(), dur:Math.max(200, 1100 * Math.abs(to - t.p)) / pace, done};
   } else {
     const to = over ? {x:t.dir > 0 ? 0 : 2 * RD.W, y:t.cy} : t.C;
     const far = Math.hypot(to.x - t.P.x, to.y - t.P.y) / (2 * RD.W);
-    t.anim = {from:{x:t.P.x, y:t.P.y}, to, t0:performance.now(), dur:t.fast || Math.max(160, (over ? 620 : 380) * Math.min(1, far * 1.2)),
+    t.anim = {from:{x:t.P.x, y:t.P.y}, to, t0:performance.now(), dur:(t.fast || Math.max(160, (over ? 620 : 380) * Math.min(1, far * 1.2))) / pace,
       lift:(t.cy > RD.H / 2 ? -1 : 1) * RD.H * (over ? 0.16 : 0.03), done};
   }
   RD.turn = t; rdKick();
@@ -10868,9 +10881,14 @@ function rdSettle(){
   RD.turn = null;
   if (t.kind === 'rigid' || t.anim.done === 'turn') rdFinish(t);
 }
-// Turning by a click or a key.
-function rdTurn(dir, cy){
-  rdSettle();
+// Turning by a click or a key. Asked while a page is going over, it waits for that one to land, so pages go over
+// no faster than they turn: each click or key press (up to a few) is a turn to come, and a key held down one at a time.
+function rdLater(dir, held){
+  if (held ? !RD.next.length : RD.next.length < 3) RD.next.push(dir);
+}
+function rdTurn(dir, cy, held){
+  const on = RD.turn;
+  if (on && on.mode === 'anim') { if (on.anim.done === 'turn') { rdLater(dir, held); return; } rdSettle(); }
   const m = rdMove(dir);
   if (!m) { drawReader(); return; }
   if (m.kind === 'rigid') { rdRigid(RD.spread, m.to, 'turn'); return; }
@@ -10924,6 +10942,9 @@ rdCanvas.addEventListener('pointerleave', () => {
 rdCanvas.addEventListener('pointerdown', ev => {
   if (!RD.doc || ev.button !== 0) return;
   rdCanvas.focus();
+  // A page (or cover) still going over: a click comes next, after it.
+  const on = RD.turn;
+  if (on && on.mode === 'anim' && on.anim.done === 'turn') { const d = rdSideAt(rdPoint(ev)); if (d) rdLater(d); return; }
   rdSettle();
   const p = rdPoint(ev), zone = rdZone(p), dir = zone ? zone.dir : rdSideAt(p), m = dir ? rdMove(dir) : null;
   if (!m) { if (RD.turn && RD.turn.mode === 'peek') RD.turn = null; drawReader(); return; }
@@ -10955,8 +10976,8 @@ rdCanvas.addEventListener('pointercancel', () => { const t = RD.turn; if (t && t
 $('bookReader').addEventListener('keydown', ev => {
   if (ev.target === $('readerGo') || !RD.doc || FL.active || FL.leaving) return;
   const forward = ['ArrowRight', 'PageDown', ' '], backward = ['ArrowLeft', 'PageUp'];
-  if (forward.includes(ev.key)) { ev.preventDefault(); rdTurn(1); }
-  else if (backward.includes(ev.key)) { ev.preventDefault(); rdTurn(-1); }
+  if (forward.includes(ev.key)) { ev.preventDefault(); rdTurn(1, undefined, ev.repeat); }
+  else if (backward.includes(ev.key)) { ev.preventDefault(); rdTurn(-1, undefined, ev.repeat); }
   else if (ev.key === 'Home' || ev.key === 'End') { ev.preventDefault(); RD.turn = null; rdGoTo(ev.key === 'Home' ? 0 : lastSpread()); drawReader(); }
 });
 $('readerGo').addEventListener('change', () => { const v = parseInt($('readerGo').value, 10); if (v) rdJump(v); });
