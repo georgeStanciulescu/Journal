@@ -9953,7 +9953,7 @@ async function loadBookLook(model){
    book, and stays there, the same model: the reader carries on drawing it (below) until the book lies open.
    Where the model was, it's gone until the book is closed again. With reduced motion asked for, the reader
    simply opens. */
-const FL = {active:false, raf:0, hid:[], lift:null, to:null, arrived:null, arrive:null, landed:false, leaving:false, t:0, ms:0};
+const FL = {active:false, back:null, raf:0, hid:[], lift:null, to:null, arrived:null, arrive:null, landed:false, leaving:false, t:0, ms:0};
 const flEase = t => t * t * t * (t * (t * 6 - 15) + 10);   // smootherstep: starts and ends at rest
 // How far off the camera is from a book in the reader: far enough that it looks as flat as the pages drawn over
 // it. A cover standing up is drawn as if seen from RD3_NEAR, so it's seen coming towards you; only the cover, as
@@ -10121,6 +10121,7 @@ async function flyLand(gen){
 }
 function flyEnd(){
   FL.active = false;
+  if (FL.back) FL.back();
   if (FL.raf) { cancelAnimationFrame(FL.raf); FL.raf = 0; }
   if (FL.arrive) { FL.arrive(); FL.arrive = null; }
   const cv = $('readerFlight'); cv.hidden = true; cv.classList.remove('landing', 'entering');
@@ -10133,7 +10134,10 @@ function flyEnd(){
 // Flies it back from t (of the way up) to where it was, over as long as it took to come that far.
 function flyBackFrom(lift, to, t, ms, gen){
   const t0 = performance.now(), dur = Math.max(250, ms * t);
-  return new Promise(done => {
+  return new Promise(end => {
+    // (and if the flight's stopped from outside, the reader closed some other way, it's over then too)
+    const done = () => { if (FL.back === done) FL.back = null; end(); };
+    FL.back = done;
     const step = now => {
       if (gen !== RD.gen) { done(); return; }
       const u = Math.min(1, (now - t0) / dur);
@@ -11013,8 +11017,12 @@ $('bookReader').addEventListener('keydown', ev => {
 $('readerGo').addEventListener('change', () => { const v = parseInt($('readerGo').value, 10); if (v) rdJump(v); });
 $('readerGo').addEventListener('keydown', ev => { if (ev.key === 'Enter') { ev.preventDefault(); $('readerGo').blur(); rdCanvas.focus(); } });
 $('readerClose').addEventListener('click', closeBook);
-$('bookReader').addEventListener('cancel', ev => { ev.preventDefault(); closeBook(); });   // Escape
-$('bookReader').addEventListener('close', closeReaderDoc);
+// Escape: taken at the key itself, as the browser would let the reader's closing be put off only once (pressed
+// again, it would close the reader then and there, cutting the book off on its way back); pressed again while the
+// book's going back, it's let be. ('cancel' is for any other way of asking, like a phone's back button.)
+$('bookReader').addEventListener('keydown', ev => { if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); closeBook(); } }, true);
+$('bookReader').addEventListener('cancel', ev => { ev.preventDefault(); closeBook(); });
+$('bookReader').addEventListener('close', () => { closeReaderDoc(); $('bookReader').classList.remove('flying', 'leaving'); });
 
 /* Dragging an entry from the list into the writing */
 let listDrag = null, listDragEnded = 0;
