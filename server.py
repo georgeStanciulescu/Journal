@@ -10158,6 +10158,7 @@ async function closeBook(){
   if (FL.active && !FL.landed && FL.lift && FL.to) {
     const gen = RD.gen, lift = FL.lift, to = FL.to, t = FL.t;
     FL.leaving = true; FL.landed = true;   // the flight up stops here (and won't land)
+    if (RD.drawTask) RD.drawTask.cancel();
     if (FL.raf) { cancelAnimationFrame(FL.raf); FL.raf = 0; }
     // The room lightens again from however dark it had got, and the bar goes, as the book goes back.
     const ms = Math.max(250, (FL.ms || 900) * t);
@@ -10175,6 +10176,7 @@ async function closeBook(){
   const target = name && [lift0.from, ...FL.hid].find(c => c && c.isConnected && c.getBoundingClientRect().width > 3);
   if (!target || FL.active || !RD.doc) { shut(); return; }
   FL.leaving = true; RD.next = [];
+  if (RD.drawTask) RD.drawTask.cancel();   // (a page being drawn is let go of: it's drawn again if it's needed)
   const gen = RD.gen, K = lastSpread();
   try {
     // Shut: a cover on its way open goes back the way it came; one on its way shut carries on; and from an open
@@ -10379,6 +10381,7 @@ const firstState = () => RD.look ? -1 : 0, lastState = () => RD.look ? lastSprea
 async function openReader(name, title, model, lift){
   closeReaderDoc();
   const gen = ++RD.gen;
+  const gone = () => gen !== RD.gen || FL.leaving;   // closed, or on its way back (it's set up no further)
   RD.open = true; RD.name = name; RD.model = model || null;
   $('readerTitle').textContent = cleanTitle(title) || 'Untitled PDF';
   $('readerPages').textContent = ''; $('readerGo').value = ''; $('readerGo').disabled = true;
@@ -10398,18 +10401,18 @@ async function openReader(name, title, model, lift){
     if (!pdfjsLib) setTimeout(() => { if (gen === RD.gen && !pdfjsLib) readerSay('Getting the page reader ready (the first time, this downloads it)\u2026'); }, 800);
     const look = model ? loadBookLook(model).catch(() => null) : Promise.resolve(null);
     const lib = await loadPdfjs();
-    if (gen !== RD.gen) return;
+    if (gone()) return;
     readerSay('');
     const task = lib.getDocument({url:pdfSrc(name), cMapUrl:'/pdfjs/cmaps/', cMapPacked:true,
       standardFontDataUrl:'/pdfjs/standard_fonts/', wasmUrl:'/pdfjs/wasm/', iccUrl:'/pdfjs/iccs/'});
     RD.task = task;
     const doc = await task.promise;
-    if (gen !== RD.gen) return;
+    if (gone()) return;
     const vp = (await doc.getPage(1)).getViewport({scale:1});
     RD.look = await look;
     if (!RD.b3 && RD.look) { const m3 = await loadModel(model).catch(() => null); RD.b3 = m3 && m3.data ? bookDims(m3.data) : null; }
     if (!RD.look) RD.b3 = null;
-    if (gen !== RD.gen) return;
+    if (gone()) return;
     RD.doc = doc; rdSetPages(doc.numPages);
     // In a book, the pages take the book's shape; on their own, the first page's.
     RD.aspect = Math.min(2, Math.max(0.25, RD.b3 ? RD.b3.aspect : RD.look ? RD.look.aspect : vp.width / vp.height));
@@ -10445,7 +10448,7 @@ async function openReader(name, title, model, lift){
     }
     rdCanvas.focus();
   } catch (err) {
-    if (gen !== RD.gen) return;
+    if (gone()) return;
     flyLand(gen);
     readerSay(err && err.message === 'pdfjs'
       ? "Couldn't get the page reader (pdf.js). It's downloaded once from the internet into journal/pdfjs: check the connection and try again."
@@ -10527,8 +10530,9 @@ async function readerPump(){
       // book is on its way up, nor, as it opens, while its cover or a leaf goes over (RD.hold), but between them;
       // and as it opens, only the pages it opens at and is leafed through to (the rest come after).
       if (RD.opening && !RD.keep.has(p)) continue;
-      while (RD.doc && ((FL.active && !FL.landed && !FL.leaving && FL.t < 1) || RD.hold || (RD.opening && RD.turn && RD.turn.mode === 'anim')))
+      while (RD.doc && ((FL.active && !FL.landed && !FL.leaving && FL.t < 1) || FL.leaving || RD.hold || (RD.opening && RD.turn && RD.turn.mode === 'anim')))
         await new Promise(r => setTimeout(r, 30));
+      if (!RD.doc) break;   // (closed meanwhile)
       RD.drawing = true;
       try { await readerRender(p); } catch (err) { /* a page that can't be drawn stays blank */ }
       finally { RD.drawing = false; }
@@ -10541,7 +10545,8 @@ async function readerRender(p){
   const fit = Math.min(RD.W / vp1.width, RD.H / vp1.height), vp = page.getViewport({scale:fit * RD.dpr});
   const c = document.createElement('canvas'); c.width = Math.max(1, Math.ceil(vp.width)); c.height = Math.max(1, Math.ceil(vp.height));
   const paper = RD.look && RD.look.paper;
-  await page.render({canvas:c, canvasContext:c.getContext('2d'), viewport:vp, background:paper ? '#FFFFFF' : READER_PAPER}).promise;
+  const task = RD.drawTask = page.render({canvas:c, canvasContext:c.getContext('2d'), viewport:vp, background:paper ? '#FFFFFF' : READER_PAPER});
+  try { await task.promise; } finally { if (RD.drawTask === task) RD.drawTask = null; }
   page.cleanup();
   if (doc !== RD.doc) return;
   if (pgen === RD.pgen || !RD.cache.has(p)) RD.cache.set(p, {canvas:c, ratio:vp1.width / vp1.height, pgen});
