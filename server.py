@@ -9875,7 +9875,7 @@ $('pdfView').addEventListener('close', () => {
    the last, its back cover closes over. A cover doesn't bend: it swings round the spine, its far edge coming
    nearer (so larger) as it stands up. The open book is then "spread" 0 to K; closed at the front it's -1, and
    closed at the back K + 1. */
-const RD = {doc:null, task:null, name:'', model:null, look:null, n:0, spread:0, target:null, keep:new Set(), next:[], aspect:0.7, W:0, H:0, ox:0, oy:0, dpr:1,
+const RD = {doc:null, task:null, name:'', model:null, look:null, n:0, spread:0, target:null, keep:new Set(), next:[], opening:false, hold:false, drawing:false, aspect:0.7, W:0, H:0, ox:0, oy:0, dpr:1,
   shift:0, cache:new Map(), queue:[], busy:false, gen:0, pgen:0, turn:null, raf:0, open:false, faceA:null, faceB:null,
   b3:null, g3:null, v3:false, v3At:0, v3Timer:0,
   skip:0, pdfN:0, ends:false};   // the PDF's pages left out at the start (a book's cover), how many are read, and endpaper leaves (rdSrc)   // the book's model, drawn in 3D while it's closed or a cover swings (rd3Draw)
@@ -10419,18 +10419,21 @@ async function openReader(name, title, model, lift){
       const calm = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
       const path = calm ? [] : rdFlickPath(saved), first = path.length ? 0 : saved;
       RD.spread = -1; RD.target = first;
-      for (const j of path) RD.keep.add(2 * j).add(2 * j + 1);
+      for (const j of [first, ...path]) RD.keep.add(2 * j).add(2 * j + 1);
       RD.W = 0; readerLayout(); readerPagesText(); drawReader();
-      const at = [first, ...path].flatMap(j => [2 * j, 2 * j + 1]).filter(p => p >= 1 && p <= RD.n), t0 = performance.now();
+      RD.opening = true;
+      if (FL.active && FL.arrived) await FL.arrived;   // (its pages are drawn once it's there, keeping still)
+      const at = [2 * first, 2 * first + 1].filter(p => p >= 1 && p <= RD.n), t0 = performance.now();
       while (gen === RD.gen && performance.now() - t0 < 1500 && !at.every(rdReady)) await new Promise(r => setTimeout(r, 60));
       await flyLand(gen);
       await new Promise(r => setTimeout(r, 250));
       if (gen === RD.gen && RD.spread === -1 && !RD.turn && !FL.leaving && !FL.active) {
+        await rdStill();
         rdRigid(-1, first, 'turn');
         while (gen === RD.gen && RD.turn && RD.turn.kind === 'rigid') await new Promise(r => setTimeout(r, 30));
         if (gen === RD.gen && RD.spread === first) await rdFlick(path, gen);
       }
-      RD.keep.clear();
+      if (gen === RD.gen) { RD.keep.clear(); RD.opening = RD.hold = false; readerWant(); }
     } else {
       RD.spread = saved;
       RD.W = 0; readerLayout(); readerPagesText(); drawReader();
@@ -10451,7 +10454,7 @@ function closeReaderDoc(){
   RD.gen++; RD.pgen++;
   // (one still loading is let go of once it's loaded: stopped halfway, pdf.js complains)
   if (RD.task) { const task = RD.task, end = () => task.destroy().catch(() => {}); if (RD.doc) end(); else task.promise.then(end, end); }
-  RD.task = RD.doc = RD.look = RD.model = RD.target = null; RD.n = RD.skip = RD.pdfN = 0; RD.ends = false; RD.cache.clear(); RD.keep.clear(); RD.next = []; RD.queue = []; RD.turn = null; RD.open = false;
+  RD.task = RD.doc = RD.look = RD.model = RD.target = null; RD.n = RD.skip = RD.pdfN = 0; RD.ends = false; RD.cache.clear(); RD.keep.clear(); RD.opening = RD.hold = false; RD.next = []; RD.queue = []; RD.turn = null; RD.open = false;
   if (RD.raf) { cancelAnimationFrame(RD.raf); RD.raf = 0; }
 }
 // The book as large as fits, and the canvas at the screen's own sharpness.
@@ -10516,11 +10519,15 @@ async function readerPump(){
     while (RD.doc && RD.queue.length) {
       const p = RD.queue.shift();
       if ((RD.cache.get(p) || {}).pgen === RD.pgen) continue;
-      // Not while the book is still rising (drawing a page holds everything else up): the pages it opens at from
-      // halfway up, and those it's to be leafed through to once it's there.
-      while (RD.doc && FL.active && !FL.landed && !FL.leaving && (FL.t < 0.5 || (FL.t < 1 && RD.keep.has(p))))
-        await new Promise(r => setTimeout(r, 40));
+      // Not while anything's moving (drawing a page holds everything else up, and it would stutter): not while the
+      // book is on its way up, nor, as it opens, while its cover or a leaf goes over (RD.hold), but between them;
+      // and as it opens, only the pages it opens at and is leafed through to (the rest come after).
+      if (RD.opening && !RD.keep.has(p)) continue;
+      while (RD.doc && ((FL.active && !FL.landed && !FL.leaving && FL.t < 1) || RD.hold || (RD.opening && RD.turn && RD.turn.mode === 'anim')))
+        await new Promise(r => setTimeout(r, 30));
+      RD.drawing = true;
       try { await readerRender(p); } catch (err) { /* a page that can't be drawn stays blank */ }
+      finally { RD.drawing = false; }
     }
   } finally { RD.busy = false; }
 }
@@ -10871,17 +10878,26 @@ function rdFlickPath(to){
   for (let i = 1; i <= n; i++) { const j = Math.round(to * Math.pow(i / n, 1.6)); if (j > (path[path.length - 1] || 0)) path.push(j); }
   return path;
 }
+// Page drawing held (the page being drawn let finish) while the book opens or a leaf goes over by itself.
+async function rdStill(){
+  RD.hold = true;
+  const t0 = performance.now();
+  while (RD.drawing && performance.now() - t0 < 1000) await new Promise(r => setTimeout(r, 15));
+}
 async function rdFlick(path, gen){
   const wait = ms => new Promise(r => setTimeout(r, ms));
   for (const [i, j] of path.entries()) {
     const from = RD.spread, going = () => gen === RD.gen && !FL.leaving && RD.spread === from;
     if (RD.turn && RD.turn.mode === 'peek') RD.turn = null;   // the pointer only resting near a corner
     if (!going() || RD.turn || j <= from) return;
-    RD.target = j; readerWant();
+    RD.target = j; RD.hold = false; readerWant();
     const t0 = performance.now();
-    while (going() && !RD.turn && performance.now() - t0 < 600 && ![2 * j, 2 * j + 1].every(p => p < 1 || p > RD.n || rdReady(p))) await wait(40);
+    while (going() && !RD.turn && performance.now() - t0 < 1200 && ![2 * j, 2 * j + 1].every(p => p < 1 || p > RD.n || rdReady(p))) await wait(40);
     if (RD.turn && RD.turn.mode === 'peek') RD.turn = null;
     if (!going() || RD.turn) return;
+    await rdStill();
+    if (!going() || (RD.turn && RD.turn.mode !== 'peek')) return;
+    RD.turn = null;
     const t = newTurn(1, RD.H);
     t.step = j - from; t.fast = path.length < 3 ? 520 : i === 0 || i === path.length - 1 ? 420 : 300;
     rdAnimate(t, 'turn');
