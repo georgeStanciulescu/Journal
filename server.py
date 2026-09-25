@@ -11019,10 +11019,14 @@ function obBuild(gl, spec){
   /* The endpaper running over the joint, from the board's edge (xb) in to the leaves (xg), at z: the board's own
      picture of it, from just beside the spine, at its true size and the same way round, ending at the spine's edge
      of the picture where it goes in among the leaves (as the free endpaper there carries on from it). */
-  const obHinge = (xb, xg, z, side) => {
+  // (under leaves, only where it shows beyond their head and tail: under them, hidden anyway, it showed through the
+  // pages lying on it near the ends of the book, where it's seen at a slant and comes out very thin on the screen)
+  const obHinge = (xb, xg, z, side, under) => {
     const m = obNew(), YB = Y + sq;
     const ub = side ? 1 - hingeA[1] : hingeA[0], ug = side ? 0 : 1, xa = Math.min(xb, xg), xz = Math.max(xb, xg), ua = xa === xb ? ub : ug, uz = xa === xb ? ug : ub;
-    obQuad(m, [[xa, YB, z], [xz, YB, z], [xz, -YB, z], [xa, -YB, z]], [0, 0, 1], [[ua, 0], [uz, 0], [uz, 1], [ua, 1]]);
+    const v = y => (YB - y) / (2 * YB);
+    for (const [y0, y1] of under ? [[YB, Y], [-Y, -YB]] : [[YB, -YB]])
+      obQuad(m, [[xa, y0, z], [xz, y0, z], [xz, y1, z], [xa, y1, z]], [0, 0, 1], [[ua, v(y0)], [uz, v(y0)], [uz, v(y1)], [ua, v(y1)]]);
     return m;
   };
   // A part of the model, moved: its triangles that keep (by their middle), each point through place().
@@ -11174,7 +11178,8 @@ function obBuild(gl, spec){
       continue;
     }
     // (the endpaper over the joint, from the board's edge in to the leaves)
-    if (inside[side] >= 0 && Math.abs(xB[side] - x0) > 1e-5) add(obHinge(xB[side], x0, zi, side), Object.assign(mat(inside[side]), {repeat:false}));
+    const pg = side ? spec.pR : spec.pL, paged = pg >= 1 && pg <= RD.n;
+    if (inside[side] >= 0 && Math.abs(xB[side] - x0) > 1e-5) add(obHinge(xB[side], x0, zi, side, paged), Object.assign(mat(inside[side]), {repeat:false}));
     // The stack of leaves on it, its top leaf (the page) curving down into the gutter, drawn in to the fold.
     const top = Math.max(zT[side], zG + 0.0005), g = 0.05 * Wp + 1.2 * (top - zG) + 0.02, us = [];
     const gw = Math.max(g, 2.5 * Math.abs(Gb[0])), X = u => sg * u + Gb[0] * Math.pow(Math.max(0, 1 - u / gw), 2);
@@ -11183,19 +11188,9 @@ function obBuild(gl, spec){
     // and far apart there, it came out lighter than the leaf that lands on it shows it, which is shaded finely)
     const gs = Math.min(Wp, 1.45 * g); for (let i = 1; i <= 10; i++) us.push(g + (gs - g) * i / 10);
     for (let i = 1; i <= 6; i++) if (gs + (Wp - gs) * i / 6 > gs + 1e-9) us.push(gs + (Wp - gs) * i / 6);
-    // (over the board it stays on the board, going down to the fold only past the board's edge: over the board and the
-    // joint, no nearer the endpaper pasted there than the leaves under it keep it, or a few leaves' thickness for a thick
-    // stack, as it curves down; near the ends of the book, where the stack is thin, it came so near the endpaper that the
-    // two couldn't be told apart in depth, and the endpaper showed through it in dashes)
-    const floor = zi + Math.min(stack[side], 0.002);
+    // (over the board it stays on the board, going down to the fold only past the board's edge)
     const zAt0 = u => u >= g ? top : zG + (top - zG) * Math.sqrt(Math.max(0, 1 - Math.pow(1 - u / g, 2)));
-    const zAt = u => sg * (X(u) - x0) >= 0 ? Math.max(zAt0(u), floor) : zAt0(u);
-    // (and a point just where it passes the spine's edge, so that it doesn't cut across below the endpaper there,
-    // between a point over the joint and one in over the spine)
-    if (sg * (X(0) - x0) < 0 && sg * (X(g) - x0) > 0) {
-      let a = 0, b = g; for (let i = 0; i < 50; i++) { const m = (a + b) / 2; if (sg * (X(m) - x0) < 0) a = m; else b = m; }
-      if (!us.some(u => Math.abs(u - b) < 1e-7)) { us.push(b); us.sort((p, q) => p - q); }
-    }
+    const zAt = u => sg * (X(u) - x0) > 0 ? Math.max(zAt0(u), zi + 0.0003) : zAt0(u);
     const slope = u => { const e = 1e-4; return (zAt(Math.min(Wp, u + e)) - zAt(Math.max(0, u - e))) / (2 * e); };
     const shadeAt = u => 1 - 0.3 * Math.pow(Math.max(0, 1 - u / (g * 1.4)), 2);
     rest[side] = zAt; shades[side] = shadeAt; lay[side] = u => [X(u), zAt(u)]; lus[side] = us;
@@ -11210,8 +11205,7 @@ function obBuild(gl, spec){
     }
     for (let i = 0; i < us.length - 1; i++) { const a = 2 * i; page.idx.push(a, a + 1, a + 3, a, a + 3, a + 2); }
     // (no page on a stack that isn't there yet, or is gone once the leaf is off it: the inside of the board shows)
-    const pg = side ? spec.pR : spec.pL;
-    if (pg >= 1 && pg <= RD.n) add(page, {tex:obPage(gl, pg), colour:[1, 1, 1, 1], lod:OB_LOD});
+    if (paged) add(page, {tex:obPage(gl, pg), colour:[1, 1, 1, 1], lod:OB_LOD});
     // The leaves' edges at the head and the tail: over the board, from the top leaf down to the board; and by the
     // spine, from the top leaf and the fold down to the back of the leaves (the chord), from this side's board to the fold.
     const ue = Math.max(0, sg * x0), over = [ue, ...us.filter(u => u > ue)], near = [...us.filter(u => u < ue), ue].reverse();
