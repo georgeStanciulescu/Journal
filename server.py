@@ -10943,7 +10943,8 @@ function obBuild(gl, spec){
   // (while a leaf goes over, how far in the book lies open goes on smoothly from where it was to where it'll be,
   // as the leaf goes: spec.fc)
   const fcL = spec.fc === undefined ? fOf(spec.kL) : spec.fc, fcR = spec.fc === undefined ? fOf(spec.kR) : spec.fc;
-  const stack = [hasL ? Math.max(0.0015 * gL, Tn * fcL) : 0, hasR ? Math.max(0.0015 * gR, Tn * (1 - fcR)) : 0];
+  // (never thinner than one leaf: about a two-thousandth of the page's height, as the flat reader has a leaf)
+  const OB_LEAF = 0.0005, stack = [hasL ? Math.max(OB_LEAF * gL, Tn * fcL) : 0, hasR ? Math.max(OB_LEAF * gR, Tn * (1 - fcR)) : 0];
   const rest = [null, null], shades = [null, null], lay = [null, null];   // (lay: where the top leaf of each side lies, u along it from the fold)   // (the top of each side, and its shade, for the leaf to lie on)
   const Y = 0.5, s = Tn * 0.5 + bt;   // (s: half the closed book's thickness, the width of the spine from joint to joint)
   // How far into the book it's open (0 at the front, 1 at the back); sn is 0 at either end and 1 in the middle.
@@ -11192,7 +11193,9 @@ function obBuild(gl, spec){
     const topPath = [...near.map(u => [X(u), zAt(u)]), Gb];
     // (each leaf reaches a page's width out from its fold: the bottom one, folded by the board, as far out as the board
     // lets it, the top one to where the page is shown; the fore-edge slopes between them, as the leaves fan out)
-    const xFb = backPath[1][0] + sg * Wp, xFt = sg * Wp, zF = zz => xFb + (xFt - xFb) * (zz - zi) / Math.max(1e-6, top - zi);
+    // (the bottom one reaching out past the top one by as much as its fold is from the top one's, round the spine: a
+    // lot, in the middle of a thick book; nothing, for a single leaf)
+    const xFt = sg * Wp, xFb = xFt + (backPath[1][0] - Gb[0]), zF = zz => xFb + (xFt - xFb) * (zz - zi) / Math.max(1e-6, top - zi);
     const botAt = u => x0 + (xFb - x0) * (u - ue) / Math.max(1e-6, Wp - ue);
     for (const [y, m] of [[Y, faces.head], [-Y, faces.tail]]) {
       // (not shaded darker down the stack: the model's page edges aren't, and they'd darken as the cover landed)
