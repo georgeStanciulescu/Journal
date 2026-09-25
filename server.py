@@ -10475,24 +10475,34 @@ function rd3Joint(gl, L, m, d, side, th, open, lean, G){
     m3Part(gl, L, {vao:g.vao, count:g.count, base:how.base || [1, 1, 1, 1], cut:how.cut || 0, lit:how.lit !== false, tex:how.tex || null});
   };
   const us = side > 0 ? 0.998 : 0.002, cover = obNew(), paste = obNew(), ends = obNew();
-  // (the endpaper over the joint, its line: straight across as it starts, bending as the open book has it, obEase, by
-  // the time it's down; s from the board's inside edge, 0, to the back of the pages, 1)
-  const w = th / Math.PI, P = s => {
-    const e = s + (1 - obEase(1 - s) - s) * w;
-    return [bi[0] + (pg[0] - bi[0]) * s, bi[1] + (pg[1] - bi[1]) * e, bi[2] + (pg[2] - bi[2]) * s];
-  };
-  // (the endpaper over the joint: the board's own picture of it from beside the spine, true to size, the same way round)
-  { const hA = rd3HingeA(d, RD.spread >= 0 && RD.spread <= lastSpread() ? RD.spread : side > 0 ? 0 : lastSpread(), side < 0), ub = side > 0 ? hA : 1 - hA, ug = side > 0 ? 1 : 0;
-    for (let i = 0; i < OB_EASE_N; i++) {
-      const sa = i / OB_EASE_N, sb = (i + 1) / OB_EASE_N, a = P(sa), b = P(sb), n = [b[1] - a[1], 0, a[0] - b[0]], xa = ub + (ug - ub) * sa, xb = ub + (ug - ub) * sb;
-      if (Math.hypot(n[0], n[2]) > 1e-9) obQuad(paste, [[a[0], T * a[2], a[1]], [b[0], T * b[2], b[1]], [b[0], -T * b[2], b[1]], [a[0], -T * a[2], a[1]]], n, [[xa, 0], [xb, 0], [xb, 1], [xa, 1]]);
-    } }
   // (the spine's end as the shader has it: sunk towards the back as the book opens; from its edge by this board, outwards)
   const zs = z => { const q = Math.max(-d.zo, Math.min(d.zo, z)); return q + (-side * d.zo - q) * open; };
   const arcM = spineArc(m.data), uz = z => (Math.max(-d.zo, Math.min(d.zo, z)) + d.zo) / (2 * d.zo);
   const arc = arcM.map(([x, z]) => [x, zs(z), 1, uz(z)]);
   if (side > 0) arc.reverse();
   const C = [d.xl, zs(side * d.zo), 1, side > 0 ? 1 : 0];
+  // (the endpaper over the joint, its line: from the board's inside edge, over the spine's edge, C, and down from there
+  // to the back of the pages, pg, as a real one goes over the joint (straight from the board's edge to the pages, it cut
+  // through the corner of the spine's round, which showed through it from inside the book); across to C straight as it
+  // starts, bending as the open book has it, obEase, by the time it's down, when C and pg come together; s from the
+  // board's edge, 0, to C, 1)
+  // (a hair in from the spine's edge, towards the leaves, so as to lie over it: meeting it just there, the spine's edge
+  // showed through, in a line down the gutter; none by the time it's down, where the open book has it at the edge,
+  // going only in the last moment, while the board comes down)
+  const w = th / Math.PI, dIn = 0.15 * bt * (1 - Math.pow(w, 12)), Ci = [C[0] + dIn, C[1], C[2]], pgi = [pg[0] + dIn, pg[1], pg[2]], P = s => {
+    const e = s + (1 - obEase(1 - s) - s) * w;
+    return [bi[0] + (Ci[0] - bi[0]) * s, bi[1] + (Ci[1] - bi[1]) * e, bi[2] + (Ci[2] - bi[2]) * s];
+  };
+  // (the endpaper over the joint: the board's own picture of it from beside the spine, true to size, the same way round)
+  { const hA = rd3HingeA(d, RD.spread >= 0 && RD.spread <= lastSpread() ? RD.spread : side > 0 ? 0 : lastSpread(), side < 0), ub = side > 0 ? hA : 1 - hA, ug = side > 0 ? 1 : 0;
+    const seg = (a, b, xa, xb) => { const n = [b[1] - a[1], 0, a[0] - b[0]]; if (Math.hypot(n[0], n[2]) > 1e-9) obQuad(paste, [[a[0], T * a[2], a[1]], [b[0], T * b[2], b[1]], [b[0], -T * b[2], b[1]], [a[0], -T * a[2], a[1]]], n, [[xa, 0], [xb, 0], [xb, 1], [xa, 1]]); };
+    for (let i = 0; i < OB_EASE_N; i++) { const sa = i / OB_EASE_N, sb = (i + 1) / OB_EASE_N; seg(P(sa), P(sb), ub + (ug - ub) * sa, ub + (ug - ub) * sb); }
+    // (down from the spine's edge to the pages: none once the two come together, as the board comes down: so thin, it
+    // would be drawn as a line over what lies in front of it)
+    const down = Math.abs(C[1] - pg[1]) > 0.25 * bt; if (down) seg(Ci, pgi, ug, ug);
+    // (and tucked in a little way under the first leaf, as it goes in among the leaves: ending at the fold, a sliver of
+    // the spine showed between it and the leaf, down the gutter, seen from inside the book)
+    seg(down ? pgi : Ci, [d.xl + 3 * bt, side * (d.zi - 0.3 * bt), 1], ug, ug); }
   // (the covering round the joint from the board's photo: the front's runs 0 at the spine, the back's 1)
   const tx = {uS:side > 0 ? 0.006 : 0.994, dir:side > 0 ? 1 : -1, W:d.xr - d.xl};
   if (arc.length) arc[0] = C;
@@ -10501,13 +10511,23 @@ function rd3Joint(gl, L, m, d, side, th, open, lean, G){
   const along = [c, side * sn], out = [-sn, side * c];
   const cap = p => [((p[0] - bi[0]) * along[0] + (p[1] - bi[1]) * along[1]) / tile,
     Math.min(1, Math.max(0, 1 - ((p[0] - bi[0]) * out[0] + (p[1] - bi[1]) * out[1]) / Math.max(1e-6, bt)))];
+  // (its ends: the joint from the board's edge round to C, and back over the endpaper to the board)
   const inTop = []; for (let i = OB_EASE_N - 1; i >= 1; i--) inTop.push(P(i / OB_EASE_N));
-  obJointFill(cover, ends, bo, bi, C, pg, arc, T, tx, cap, obGrooveR(d) * (1 - c) / 2, [-along[0], -along[1]], inTop);
-  // (and closed along its length, from the spine's edge down to the back of the leaves, covered as the joint is: open,
-  // a hairline where the covering meets the spine let the inside of the book, the endpaper and the leaves, show
-  // through, from top to bottom; the board's edge is closed by rd3Backing) (none once the two come together, as the
-  // board comes down: so thin, it would be drawn as a line over what lies in front of it)
-  if (Math.abs(C[1] - pg[1]) > 0.25 * bt) strip(cover, C, pg, tx.uS);
+  obJointFill(cover, ends, bo, bi, C, C, arc, T, tx, cap, obGrooveR(d) * (1 - c) / 2, [-along[0], -along[1]], inTop);
+  // (and the board's edge by the spine, covered as the joint is, while the board stands over the spine: the joint round
+  // from the board's outside to the spine's edge runs inside the board, or close along its edge, then, and the board
+  // has no edge of its own there, so the inside of the board, the back of the endpaper pasted in it, showed through the
+  // joint from top to bottom; further over, the edge is closed in by the joint, and as the board comes down it would
+  // be seen edge on, and so thin, drawn as a line over what lies in front of it)
+  if (w < 0.7) strip(cover, bo, bi, tx.uS);
+  // (and behind the spine's edge, where the covering ends and the spine's round begins, both there: a narrow strip of
+  // the covering just inside, from under the one to under the other, so that the hairline between them shows the
+  // covering, not the inside of the board beyond)
+  { const un = (a, b) => { const x = b[0] - a[0], z = b[1] - a[1], l = Math.hypot(x, z) || 1; return [x / l, z / l]; };
+    const d1 = un(C, arc.length > 1 ? arc[1] : bo), d2 = un(C, bo), ni = un(C, [(bi[0] + pg[0]) / 2, (bi[1] + pg[1]) / 2]);
+    const G = (dd, k) => [C[0] + dd[0] * 0.6 * bt + ni[0] * k * bt, C[1] + dd[1] * 0.6 * bt + ni[1] * k * bt, 1];
+    strip(cover, G(d1, 0.07), [C[0] + ni[0] * 0.07 * bt, C[1] + ni[1] * 0.07 * bt, 1], tx.uS);
+    strip(cover, [C[0] + ni[0] * 0.07 * bt, C[1] + ni[1] * 0.07 * bt, 1], G(d2, 0.07), tx.uS); }
   const ins = side > 0 ? part('insideFront', 'endpaper') : part('insideBack', 'endpaper');
   draw(cover, side > 0 ? part('front', 'board') : part('back', 'front', 'board'), [0.3, 0.08, 0.08, 1]); draw(paste, ins, [0.8, 0.77, 0.7, 1]); draw(ends, part('rim', 'board'), [0.3, 0.08, 0.08, 1]);
   gl.bindVertexArray(null);
