@@ -9074,12 +9074,12 @@ void main(){
   const fs = `#version 300 es
 precision highp float;
 in vec3 vNrm; in vec4 vCol; in vec2 vUv;
-uniform vec4 uBase; uniform sampler2D uTex; uniform bool uHasTex; uniform float uCut; uniform bool uLit; uniform float uBright;
+uniform vec4 uBase; uniform sampler2D uTex; uniform bool uHasTex; uniform float uCut; uniform bool uLit; uniform float uBright; uniform float uLod;
 uniform highp int uSwing; uniform highp float uWinH;
 out vec4 outColor;
 void main(){
   vec4 c = uBase * vCol;
-  if (uHasTex) { vec4 t = texture(uTex, vUv); c *= vec4(pow(t.rgb, vec3(2.2)), t.a); }
+  if (uHasTex) { vec4 t = texture(uTex, vUv, uLod); c *= vec4(pow(t.rgb, vec3(2.2)), t.a); }
   if (c.a < uCut) discard;
   // the back of the book between the boards: in their shadow just under their edge (see rdSpine)
   vec3 n = normalize(vNrm); if (!gl_FrontFacing) n = -n;
@@ -9101,7 +9101,7 @@ void main(){
   gl.linkProgram(prog);
   if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) { M3.failed = true; return null; }
   M3.prog = prog;
-  M3.loc = Object.fromEntries(['uProj', 'uView', 'uBase', 'uTex', 'uHasTex', 'uCut', 'uLit', 'uBright', 'uSwing', 'uSide', 'uHinge', 'uCS', 'uOpen', 'uZo', 'uLean', 'uWin', 'uWinH', 'uPy1', 'uWinU', 'uGap', 'uShift', 'uUv']
+  M3.loc = Object.fromEntries(['uProj', 'uView', 'uBase', 'uTex', 'uHasTex', 'uCut', 'uLit', 'uBright', 'uSwing', 'uSide', 'uHinge', 'uCS', 'uOpen', 'uZo', 'uLean', 'uWin', 'uWinH', 'uPy1', 'uWinU', 'uGap', 'uShift', 'uUv', 'uLod']
     .map(u => [u, gl.getUniformLocation(prog, u)]));
   M3.gl = gl;
   return gl;
@@ -9187,7 +9187,7 @@ function m3Draw(v){
   }
   gl.uniformMatrix4fv(L.uProj, false, m4.perspective(M3_FOV, aspect, Math.max(0.01, dist - 1.5 * grow - Math.hypot(s.panX, s.panY)), dist + 3 * grow));
   gl.uniformMatrix4fv(L.uView, false, view);
-  gl.uniform1i(L.uTex, 0);
+  gl.uniform1i(L.uTex, 0); gl.uniform1f(L.uLod, 0);
   for (const p of m3Gpu(gl, m)) {
     if (p.name === 'spineWindow' && !bd) continue;   // (only for a book shown open; shut, it's a picture lying where nothing shows it)
     if (bd) gl.uniform1i(L.uSwing, p.name === 'spineWindow' ? 4 : RD3_BOARD.has(p.name) ? 1 : RD3_SPINE.has(p.name) ? 2 : 0);
@@ -9898,7 +9898,7 @@ $('pdfView').addEventListener('close', () => {
    nearer (so larger) as it stands up. The open book is then "spread" 0 to K; closed at the front it's -1, and
    closed at the back K + 1. */
 const RD = {doc:null, task:null, name:'', model:null, look:null, n:0, spread:0, target:null, keep:new Set(), next:[], opening:false, hold:false, drawing:false, aspect:0.7, W:0, H:0, ox:0, oy:0, dpr:1,
-  shift:0, cache:new Map(), queue:[], busy:false, gen:0, pgen:0, turn:null, raf:0, open:false, faceA:null, faceB:null,
+  shift:0, cache:new Map(), hi:new Map(), queue:[], busy:false, gen:0, pgen:0, turn:null, raf:0, open:false, faceA:null, faceB:null,
   b3:null, g3:null, v3:false, v3At:0, v3Timer:0,
   skip:0, pdfN:0, ends:false};   // the PDF's pages left out at the start (a book's cover), how many are read, and endpaper leaves (rdSrc)   // the book's model, drawn in 3D while it's closed or a cover swings (rd3Draw)
 const READER_PAPER = '#FBFAF6', READER_BOARD = '#4B1E26', READER_EDGE = '#E4DFD3';
@@ -10037,7 +10037,7 @@ function m3Full(){
 }
 function m3Part(gl, L, p){
   gl.uniform4fv(L.uBase, p.base); gl.uniform1f(L.uCut, p.cut); gl.uniform1i(L.uLit, p.lit ? 1 : 0);
-  gl.uniform1i(L.uHasTex, p.tex ? 1 : 0);
+  gl.uniform1i(L.uHasTex, p.tex ? 1 : 0); gl.uniform1f(L.uLod, p.lod || 0);
   gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, p.tex);
   gl.bindVertexArray(p.vao);
   gl.drawElements(gl.TRIANGLES, p.count, gl.UNSIGNED_INT, 0);
@@ -10789,7 +10789,7 @@ $('reader3d').addEventListener('click', () => {
   OB.on = !OB.on;
   try { localStorage.setItem('journal-reader-3d', OB.on ? '1' : '0'); } catch (e) {}
   RD.turn = null; if (!OB.on) rvReset();
-  obShowButton(); drawReader(); rdCanvas.focus();
+  obShowButton(); drawReader(); readerWant(); rdCanvas.focus();
 });
 // A colour ('rgb(…)', '#rrggbb' or [r, g, b]) as the shader takes it.
 function obColour(css, fallback){
@@ -10812,7 +10812,7 @@ function obTex(gl, slot, key, src){
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
   const an = gl.getExtension('EXT_texture_filter_anisotropic');
-  if (an) gl.texParameterf(gl.TEXTURE_2D, an.TEXTURE_MAX_ANISOTROPY_EXT, Math.min(8, gl.getParameter(an.MAX_TEXTURE_MAX_ANISOTROPY_EXT)));
+  if (an) gl.texParameterf(gl.TEXTURE_2D, an.TEXTURE_MAX_ANISOTROPY_EXT, Math.min(16, gl.getParameter(an.MAX_TEXTURE_MAX_ANISOTROPY_EXT)));
   rec.key = key;
   return rec.tex;
 }
@@ -10823,31 +10823,42 @@ function obTex(gl, slot, key, src){
 function obPage(gl, p){
   const inBook = p >= 1 && p <= RD.n, src = inBook ? rdSrc(p) : {blank:true}, e = src.pdf && RD.cache.get(p), W = RD.W, H = RD.H;
   const slot = 'pg' + (inBook ? p : 0);
-  const key = [RD.gen, p, e ? e.pgen + ':' + e.canvas.width : '-', W, H, RD.dpr].join();
+  const hiE = src.pdf && RD.hi.get(p);
+  const key = [RD.gen, p, hiE ? 'hi' + hiE.canvas.width : e ? e.pgen + ':' + e.canvas.width : '-', W, H, RD.dpr].join();
   const T = RD.obTex && RD.obTex.get(slot);
   if (T && T.gl === gl && T.key === key) { T.used = performance.now(); return T.tex; }
   if (RD.obTex) {   // (those used longest ago go; those being drawn are used for every picture)
     const pgs = [...RD.obTex.keys()].filter(s => /^pg\d+$/.test(s) && s !== slot && s !== 'pg0');
-    if (pgs.length > 9) {
+    if (pgs.length > 7) {
       const used = s => RD.obTex.get(s).used || 0;
-      for (const s of pgs.sort((a, b) => used(a) - used(b)).slice(0, pgs.length - 9)) {
+      for (const s of pgs.sort((a, b) => used(a) - used(b)).slice(0, pgs.length - 7)) {
         const r = RD.obTex.get(s); if (r.gl === gl) gl.deleteTexture(r.tex); RD.obTex.delete(s);
       }
     }
   }
-  const k = RD.dpr * 1.25, cv = document.createElement('canvas');
+  // The page drawn for the 3D book (RD.hi), put down pixel for pixel on its paper, the paper around it made to match;
+  // until that's drawn, the flat book's drawing of it, stretched to fit.
+  const hi = src.pdf && RD.hi.get(p);
+  const ratio = hi ? hi.canvas.width / hi.canvas.height : e ? e.ratio : W / H;
+  let w = W, h = W / ratio; if (h > H) { h = H; w = H * ratio; }
+  const k = hi ? hi.canvas.width / w : RD.dpr * 1.25, cv = document.createElement('canvas');
   cv.width = Math.max(1, Math.round(W * k)); cv.height = Math.max(1, Math.round(H * k));
   const c = cv.getContext('2d'); c.setTransform(k, 0, 0, k, 0, 0);
   if (src.end) rdFill(c, RD.look.endsheet, 0, 0, W, H, READER_PAPER); else rdPaper(c, 0, 0, W, H);
-  if (e) {
-    let w = W, h = W / e.ratio; if (h > H) { h = H; w = H * e.ratio; }
+  if (hi || e) {
     c.save(); if (RD.look && RD.look.paper) c.globalCompositeOperation = 'multiply';
-    c.imageSmoothingQuality = 'high'; c.drawImage(e.canvas, (W - w) / 2, (H - h) / 2, w, h); c.restore();
+    if (hi) {
+      const pc = hi.canvas;
+      c.setTransform(1, 0, 0, 1, 0, 0); c.drawImage(pc, Math.round((cv.width - pc.width) / 2), Math.round((cv.height - pc.height) / 2));
+    } else { c.imageSmoothingQuality = 'high'; c.drawImage(e.canvas, (W - w) / 2, (H - h) / 2, w, h); }
+    c.restore();
   } else if (src.pdf) {   // not drawn yet: its number, as the flat book shows it
     c.fillStyle = 'rgba(30,39,35,.3)'; c.font = 'italic ' + Math.round(Math.max(11, H * 0.028)) + 'px Spectral, Georgia, serif';
     c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(String(src.pdf), W / 2, H / 2);
   }
-  return obTex(gl, slot, key, cv);
+  const tex = obTex(gl, slot, key, cv);
+  cv.width = cv.height = 0;   // (on the graphics card now: its memory let go of straight away)
+  return tex;
 }
 // Triangles on the graphics card: positions, normals, colours (a shade each), texture positions, and indices.
 function obMesh(gl, made, m){
@@ -11136,7 +11147,7 @@ function obBuild(gl, spec){
       obVert(page, [X(u), Y, z], nn, [tu, 0], shadeAt(u)); obVert(page, [X(u), -Y, z], nn, [tu, 1], shadeAt(u));
     }
     for (let i = 0; i < us.length - 1; i++) { const a = 2 * i; page.idx.push(a, a + 1, a + 3, a, a + 3, a + 2); }
-    add(page, {tex:obPage(gl, side ? spec.pR : spec.pL), colour:[1, 1, 1, 1]});
+    add(page, {tex:obPage(gl, side ? spec.pR : spec.pL), colour:[1, 1, 1, 1], lod:OB_LOD});
     // The leaves' edges at the head and the tail: over the board, from the top leaf down to the board; and by the
     // spine, from the top leaf and the fold down to the back of the leaves (the chord), from this side's board to the fold.
     const ue = Math.max(0, sg * x0), over = [ue, ...us.filter(u => u > ue)], near = [...us.filter(u => u < ue), ue].reverse();
@@ -11310,7 +11321,7 @@ function obLeaf(gl, L, t, sp){
   for (const [mesh, pg] of [[lf.front, sp.front], [lf.back, sp.back]]) {
     const tex = obPage(gl, pg);
     gl.bindTexture(gl.TEXTURE_2D, tex); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    m3Part(gl, L, {vao:mesh.vao, count:mesh.count, base:[1, 1, 1, 1], cut:0, lit:true, tex});
+    m3Part(gl, L, {vao:mesh.vao, count:mesh.count, base:[1, 1, 1, 1], cut:0, lit:true, tex, lod:OB_LOD});
   }
   gl.disable(gl.CULL_FACE);
 }
@@ -11335,7 +11346,7 @@ function obDraw(){
   gl.uniform1f(L.uBright, M3_REST_BRIGHT); gl.uniform1i(L.uSwing, 0);
   for (const p of RD.ob.parts) {
     if (p.tex) { gl.bindTexture(gl.TEXTURE_2D, p.tex); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, p.repeat ? gl.REPEAT : gl.CLAMP_TO_EDGE); }
-    m3Part(gl, L, {vao:p.mesh.vao, count:p.mesh.count, base:p.base || (p.tex ? [1, 1, 1, 1] : p.colour), cut:p.cut || 0, lit:p.lit !== false, tex:p.tex || null});
+    m3Part(gl, L, {vao:p.mesh.vao, count:p.mesh.count, base:p.base || (p.tex ? [1, 1, 1, 1] : p.colour), cut:p.cut || 0, lit:p.lit !== false, tex:p.tex || null, lod:p.lod});
   }
   if (obLeafTurn(t)) obLeaf(gl, L, t, sp);
   gl.bindVertexArray(null); gl.uniform1f(L.uBright, 0);
@@ -11458,7 +11469,7 @@ function closeReaderDoc(){
   RD.gen++; RD.pgen++;
   // (one still loading is let go of once it's loaded: stopped halfway, pdf.js complains)
   if (RD.task) { const task = RD.task, end = () => task.destroy().catch(() => {}); if (RD.doc) end(); else task.promise.then(end, end); }
-  RD.task = RD.doc = RD.look = RD.model = RD.target = null; RD.n = RD.skip = RD.pdfN = 0; RD.ends = false; RD.cache.clear(); RD.keep.clear(); RD.opening = RD.hold = false; RD.next = []; RD.queue = []; RD.turn = null; RD.open = false;
+  RD.task = RD.doc = RD.look = RD.model = RD.target = null; RD.n = RD.skip = RD.pdfN = 0; RD.ends = false; RD.cache.clear(); RD.hi.clear(); RD.keep.clear(); RD.opening = RD.hold = false; RD.next = []; RD.queue = []; RD.turn = null; RD.open = false;
   if (RD.raf) { cancelAnimationFrame(RD.raf); RD.raf = 0; }
 }
 // The book as large as fits, and the canvas at the screen's own sharpness.
@@ -11524,7 +11535,60 @@ function readerWant(){
   const want = p => p >= 1 && p <= RD.n && rdSrc(p).pdf && (RD.cache.get(p) || {}).pgen !== RD.pgen;
   RD.queue = [...new Set([at, at - 1, ...RD.keep, at + 1, at + 2, at - 2, at - 3, at + 3, at + 4, at - 4, at - 5])].filter(want);
   for (const p of [...RD.cache.keys()]) if (Math.abs(p - at) > 12 && !RD.keep.has(p)) RD.cache.delete(p);
+  obHiWant(at);
   readerPump();
+}
+/* Sharper pages for the 3D book. The flat book's pages are drawn exactly as large as they're shown on it; in 3D they're
+   seen at a slant and brought nearer, and stretched to that they'd blur. So for the 3D book, the pages near where it's
+   open are drawn again (RD.hi), each as the PDF draws it, not stretched: twice as tall as a page shows on the screen,
+   so that the graphics card's own half-size copy of it is just the screen's sharpness and, taken a little towards the
+   larger one (OB_LOD), stays crisp at a slant; and the two lying open, as much taller again as the book's been brought
+   nearer (in steps, so a little nearer doesn't draw them again), up to what the graphics card and memory allow. */
+const OB_LOD = -0.5, OB_HI_MAX = 4096, OB_HI_AREA = 12e6, OB_HI_ALL = 48e6;   // (most pixels a side, a page, and all together)
+function obHiH(open){
+  const base = 2 * RD.H * Math.min(window.devicePixelRatio || 1, 2), z = open ? Math.max(1, RV.zoom) : 1;
+  return Math.round(base * Math.pow(2, Math.ceil(Math.log2(z) * 2 - 1e-6) / 2));
+}
+function obHiWant(at){
+  RD.hiQueue = [];
+  if (!obActive() || RD.spread < 0 || RD.spread > lastSpread()) return;
+  // the two lying open, then those a leaf going over would show (its two sides, and the page under it), either way
+  for (const p of [at - 1, at, at + 1, at - 2, at + 2, at - 3]) {
+    if (p < 1 || p > RD.n || !rdSrc(p).pdf) continue;
+    const h = obHiH(p === at || p === at - 1), e = RD.hi.get(p);
+    if (!e || e.h < h) RD.hiQueue.push([p, h]);
+  }
+  for (const p of [...RD.hi.keys()]) if (p < at - 3 || p > at + 2) RD.hi.delete(p);
+}
+// Too many pixels altogether: those furthest from where it's open go back to the size a page is drawn at, or go.
+function obHiTrim(at){
+  let all = 0; for (const e of RD.hi.values()) all += e.canvas.width * e.canvas.height;
+  const far = [...RD.hi.keys()].sort((a, b) => Math.abs(b - at + 0.5) - Math.abs(a - at + 0.5));
+  for (const p of far) {
+    if (all <= OB_HI_ALL) break;
+    if (p === at || p === at - 1) continue;
+    const e = RD.hi.get(p); all -= e.canvas.width * e.canvas.height; RD.hi.delete(p);
+  }
+}
+async function readerRenderHi(p, h){
+  const doc = RD.doc, gen = RD.gen;
+  const page = await doc.getPage(rdSrc(p).pdf), vp1 = page.getViewport({scale:1});
+  const gl = m3Gl(), most = Math.min(OB_HI_MAX, gl ? gl.getParameter(gl.MAX_TEXTURE_SIZE) : OB_HI_MAX);
+  // (as large as it fits on the page, as the flat book has it)
+  const s = Math.min(Math.min(RD.W / vp1.width, RD.H / vp1.height) * h / RD.H, most / Math.max(vp1.width, vp1.height),
+    Math.sqrt(OB_HI_AREA / (vp1.width * vp1.height)));
+  const vp = page.getViewport({scale:s}), c = document.createElement('canvas');
+  c.width = Math.max(1, Math.floor(vp.width)); c.height = Math.max(1, Math.floor(vp.height));
+  const paper = RD.look && RD.look.paper;
+  const task = RD.drawTask = page.render({canvas:c, canvasContext:c.getContext('2d'), viewport:vp, background:paper ? '#FFFFFF' : READER_PAPER});
+  try { await task.promise; } finally { if (RD.drawTask === task) RD.drawTask = null; }
+  page.cleanup();
+  if (doc !== RD.doc || gen !== RD.gen) return;
+  const old = RD.hi.get(p);
+  if (old && old.h >= h) return;
+  RD.hi.set(p, {canvas:c, h});
+  obHiTrim(2 * Math.max(0, Math.min(lastSpread(), RD.spread)) + 1);
+  drawReader();
 }
 async function readerPump(){
   if (RD.busy) return;
@@ -11544,7 +11608,19 @@ async function readerPump(){
       try { await readerRender(p); } catch (err) { /* a page that can't be drawn stays blank */ }
       finally { RD.drawing = false; }
     }
+    // Then, for the 3D book, its sharper pages; not while it's being turned about or a leaf goes over (drawing one of
+    // those takes a moment), nor while it's opening.
+    while (RD.doc && RD.hiQueue && RD.hiQueue.length && !RD.queue.length) {
+      if (RD.opening || RD.hold || RD.turn || RH.drag || FL.active || FL.leaving) { await new Promise(r => setTimeout(r, 60)); continue; }
+      if (!obActive()) { RD.hiQueue = []; break; }
+      const [p, h] = RD.hiQueue.shift(), e = RD.hi.get(p);
+      if (e && e.h >= h) continue;
+      RD.drawing = true;
+      try { await readerRenderHi(p, h); } catch (err) { /* the flat book's drawing of it does */ }
+      finally { RD.drawing = false; }
+    }
   } finally { RD.busy = false; }
+  if (RD.doc && RD.queue.length) readerPump();
 }
 async function readerRender(p){
   const doc = RD.doc, pgen = RD.pgen;
@@ -12278,6 +12354,7 @@ rdCanvas.addEventListener('wheel', ev => {
   ev.preventDefault();
   RV.zoom = Math.max(0.35, Math.min(6, RV.zoom * Math.exp(-ev.deltaY * (ev.deltaMode === 1 ? 0.05 : 0.0015))));
   drawReader();
+  clearTimeout(RD.hiTimer); RD.hiTimer = setTimeout(readerWant, 250);   // (the open pages drawn sharper, once it's stopped)
 }, {passive:false});
 rdCanvas.addEventListener('dblclick', ev => { if (RD.doc && obActive()) { ev.preventDefault(); rvGoHome(); } });
 rdCanvas.addEventListener('contextmenu', ev => { if (obActive()) ev.preventDefault(); });
