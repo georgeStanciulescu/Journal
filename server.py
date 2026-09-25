@@ -10391,6 +10391,10 @@ const rd3EdgeTex = (gl, slot, e, left) => rd3Tex(gl, slot, [e.t, e.out, left].jo
    way out from them, the endpaper running over the joint between (the open book in 3D only; the flat one is drawn
    with the board at the spine). */
 const rd3Gap = d => obActive() ? Math.max(1.5 * (d.zo - d.zi), 0.022 * d.py1) : 0;
+/* How far the inside of a board swung open lies above the top of the leaves, at the ends of the open book in 3D, in
+   the model's units: swung over its joint, level with the spine's edge, about a board's thickness (as obBuild has
+   it, in pages' heights: bt less a hair). It swings round a hinge half as far up, so that it lands just there. */
+const rd3Rise = d => { if (!obActive()) return 0; const py = 2 * d.py1; return Math.max(0, Math.max(0.004, (d.zo - d.zi) / py) - 0.002) * py; };
 // How far out a board lies at spread k of the open book (obBuild), in the model's units: the whole gap where the
 // spine stands up and the board lies open over it, less the further the spine turns under the book, half of it in
 // the middle. (back: the back board)
@@ -10414,14 +10418,16 @@ function rd3GapAt(d, k, back){
    Worked out as the shader moves the board (with its lean), and drawn as it is. */
 function rd3Joint(gl, L, m, d, side, th, open, lean, G){
   const gpu = m3Gpu(gl, m), part = (...names) => { for (const n of names) { const p = gpu.find(q => q.name === n); if (p) return p; } return null; };
-  const hx = d.xl - G / 2, hz = side * d.zi, c = Math.cos(th), sn = Math.sin(th), T = d.top, bt = d.zo - d.zi, tile = rimTile(m.data);
+  const hx = d.xl - G / 2, hz = side * (d.zi + rd3Rise(d) / 2), c = Math.cos(th), sn = Math.sin(th), T = d.top, bt = d.zo - d.zi, tile = rimTile(m.data);
   const at = (px, pz) => {
     const dx = px - hx, dz = pz - hz, z = hz + side * dx * sn + dz * c, k = 1 + lean * Math.max(side * (z - hz), 0);
     return [hx + (dx * c - side * dz * sn) * k, z, k];
   };
   // The joint, from the board's edge (its inside corner bi, outside bo) to the spine and the back of the pages (the
   // top of the pages there, pg): shut, it's nothing; open, it's the board carried on in to the spine (obJointFill).
-  const bi = at(d.xl, side * d.zi), bo = at(d.xl, side * d.zo), pg = [d.xl, side * d.zi, 1];
+  // (the back of the pages by the spine's edge: as the spine's edge comes down as the board goes from over it, the
+  // endpaper going in among the leaves at the fold, as the open book has it: obBuild's zin)
+  const bi = at(d.xl, side * d.zi), bo = at(d.xl, side * d.zo), pg = [d.xl, side * (d.zi - 0.002 * 2 * d.py1 * th / Math.PI), 1];
   const strip = (mesh, a, b, u) => {
     const n = [b[1] - a[1], 0, a[0] - b[0]];
     if (Math.hypot(n[0], n[2]) < 1e-7) return;
@@ -10433,10 +10439,18 @@ function rd3Joint(gl, L, m, d, side, th, open, lean, G){
     m3Part(gl, L, {vao:g.vao, count:g.count, base:how.base || [1, 1, 1, 1], cut:how.cut || 0, lit:how.lit !== false, tex:how.tex || null});
   };
   const us = side > 0 ? 0.998 : 0.002, cover = obNew(), paste = obNew(), ends = obNew();
+  // (the endpaper over the joint, its line: straight across as it starts, bending as the open book has it, obEase, by
+  // the time it's down; s from the board's inside edge, 0, to the back of the pages, 1)
+  const w = th / Math.PI, P = s => {
+    const e = s + (1 - obEase(1 - s) - s) * w;
+    return [bi[0] + (pg[0] - bi[0]) * s, bi[1] + (pg[1] - bi[1]) * e, bi[2] + (pg[2] - bi[2]) * s];
+  };
   // (the endpaper over the joint: the board's own picture of it from beside the spine, true to size, the same way round)
   { const hA = rd3HingeA(d, RD.spread >= 0 && RD.spread <= lastSpread() ? RD.spread : side > 0 ? 0 : lastSpread(), side < 0), ub = side > 0 ? hA : 1 - hA, ug = side > 0 ? 1 : 0;
-    const n = [pg[1] - bi[1], 0, bi[0] - pg[0]];
-    if (Math.hypot(n[0], n[2]) > 1e-7) obQuad(paste, [[bi[0], T * bi[2], bi[1]], [pg[0], T, pg[1]], [pg[0], -T, pg[1]], [bi[0], -T * bi[2], bi[1]]], n, [[ub, 0], [ug, 0], [ug, 1], [ub, 1]]); }
+    for (let i = 0; i < OB_EASE_N; i++) {
+      const sa = i / OB_EASE_N, sb = (i + 1) / OB_EASE_N, a = P(sa), b = P(sb), n = [b[1] - a[1], 0, a[0] - b[0]], xa = ub + (ug - ub) * sa, xb = ub + (ug - ub) * sb;
+      if (Math.hypot(n[0], n[2]) > 1e-9) obQuad(paste, [[a[0], T * a[2], a[1]], [b[0], T * b[2], b[1]], [b[0], -T * b[2], b[1]], [a[0], -T * a[2], a[1]]], n, [[xa, 0], [xb, 0], [xb, 1], [xa, 1]]);
+    } }
   // (the spine's end as the shader has it: sunk towards the back as the book opens; from its edge by this board, outwards)
   const zs = z => { const q = Math.max(-d.zo, Math.min(d.zo, z)); return q + (-side * d.zo - q) * open; };
   const arcM = spineArc(m.data), uz = z => (Math.max(-d.zo, Math.min(d.zo, z)) + d.zo) / (2 * d.zo);
@@ -10451,7 +10465,8 @@ function rd3Joint(gl, L, m, d, side, th, open, lean, G){
   const along = [c, side * sn], out = [-sn, side * c];
   const cap = p => [((p[0] - bi[0]) * along[0] + (p[1] - bi[1]) * along[1]) / tile,
     Math.min(1, Math.max(0, 1 - ((p[0] - bi[0]) * out[0] + (p[1] - bi[1]) * out[1]) / Math.max(1e-6, bt)))];
-  obJointFill(cover, ends, bo, bi, C, pg, arc, T, tx, cap, obGrooveR(d) * (1 - c) / 2, [-along[0], -along[1]]);
+  const inTop = []; for (let i = OB_EASE_N - 1; i >= 1; i--) inTop.push(P(i / OB_EASE_N));
+  obJointFill(cover, ends, bo, bi, C, pg, arc, T, tx, cap, obGrooveR(d) * (1 - c) / 2, [-along[0], -along[1]], inTop);
   const ins = side > 0 ? part('insideFront', 'endpaper') : part('insideBack', 'endpaper');
   draw(cover, side > 0 ? part('front', 'board') : part('back', 'front', 'board'), [0.3, 0.08, 0.08, 1]); draw(paste, ins, [0.8, 0.77, 0.7, 1]); draw(ends, part('rim', 'board'), [0.3, 0.08, 0.08, 1]);
   gl.bindVertexArray(null);
@@ -10578,7 +10593,7 @@ function obFlat(mesh, poly, Y, cap){
    they make (as it hangs under the book), it dips into a shallow groove over the last stretch (R) before the spine's
    edge, as at a real book's joint, coming out of it along the spine's own curve, so that the one runs smoothly on
    into the other and all of the spine shows. */
-function obJointFill(cover, ends, Bo, Bi, C, In, arc, Y, tx, cap, R, toSpine){
+function obJointFill(cover, ends, Bo, Bi, C, In, arc, Y, tx, cap, R, toSpine, inTop){
   const ux = C[0] - Bo[0], uz = C[1] - Bo[1], ul = Math.hypot(ux, uz);
   // Where the board's outside, carried on towards the spine (toSpine: along the board), meets the spine's round before
   // its edge (X).
@@ -10612,6 +10627,8 @@ function obJointFill(cover, ends, Bo, Bi, C, In, arc, Y, tx, cap, R, toSpine){
     path.push(C); poly = [Bi, ...path, In];
   }
   if (obCrosses(poly)) { path = [Bo, C]; poly = [Bi, Bo, C, In]; }
+  // (its end's top edge, from the leaves back to the board's inside, as the endpaper over the joint bends: inTop)
+  if (inTop && inTop.length) { const q = poly.concat(inTop); if (!obCrosses(q)) poly = q; }
   obCoverStrips(cover, path, tx, Y);
   obFlat(ends, poly, Y, cap);
 }
@@ -10709,7 +10726,7 @@ function rd3Draw(t){
   RD.rvLast = {x, y, s, dist, base:m4.mul(m4.trs([back ? d.xl : -d.xl, 0, -d.zi]), turn), pivot:[pc, 0, -d.zi * (1 - om) + zAdj * om]};
   gl.uniformMatrix4fv(L.uView, false, rvView(dist, RD.rvLast.pivot, RD.rvLast.base));
   gl.uniform1f(L.uBright, M3_REST_BRIGHT); gl.uniform1f(L.uSide, side);
-  gl.uniform2f(L.uHinge, d.xl, side * d.zi); gl.uniform2f(L.uCS, Math.cos(th), Math.sin(th));
+  gl.uniform2f(L.uHinge, d.xl, side * (d.zi + rd3Rise(d) / 2)); gl.uniform2f(L.uCS, Math.cos(th), Math.sin(th));
   // The board swings round its joint, out from the back of the pages (see rd3Gap), and a page on it slides along it
   // as it goes, to come down at the gutter.
   const G = rd3GapAt(d, open >= 0 ? open : back ? K : 0, back);
@@ -10909,6 +10926,12 @@ function obMesh(gl, made, m){
   return {vao, count:m.idx.length};
 }
 const obNew = () => ({pos:[], nrm:[], col:[], uv:[], idx:[]});
+// How far down from the board to the leaves the endpaper over a joint has come, t of the way across from the leaves
+// to the board's edge (0 at the leaves, 1 at the board): level with the board at its edge, bending down from there
+// (smoothly, as paper does, rather than creased at the board's edge), and going on down into the gutter at the
+// spine's edge (level there too, it lay along the covering under it, and the two flickered); and in how many strips
+// it's drawn.
+const obEase = t => t * (2 - t), OB_EASE_N = 10;
 function obVert(m, p, n, uv, shade){
   const l = Math.hypot(...n) || 1, s = Math.pow(shade === undefined ? 1 : shade, 2.2);
   m.pos.push(...p); m.nrm.push(n[0] / l, n[1] / l, n[2] / l); m.col.push(s, s, s, 1); m.uv.push(...uv);
@@ -10977,7 +11000,12 @@ function obBuild(gl, spec){
   const Mz = Lc / 2 * Math.abs(sth), CL = [-Lc / 2 * cth, Mz + Lc / 2 * sth], CR = [Lc / 2 * cth, Mz - Lc / 2 * sth];
   const c = [(CR[0] - CL[0]) / Lc, (CR[1] - CL[1]) / Lc], B = [c[1], -c[0]];   // (along the chord; and out, away from the pages)
   // Each board: its outside at z0[side], its inside (the endpaper pasted down, and the leaves on it) at base[side].
-  const z0 = f < 0.5 ? [CL[1] - lam, CR[1]] : [CL[1], CR[1] - lam], base = z0.map(z => z + bt);
+  // The board on the thin side, swung open over its joint, lies level with the spine's edge there, its inside a
+  // board's thickness or so (lam) above the top of the leaves on the other side, as a real book's does (rd3Rise); at the
+  // spine's edge, where the endpaper goes in among the leaves, it's down at the fold of the leaves beside it (zin: the
+  // spine's edge, at the ends; by the middle, the board's inside), the endpaper running down over the joint from the
+  // board to there (hingeZ). (a hair above the fold, as it was, the back of the book showed through along the gutter)
+  const z0 = [CL[1], CR[1]], base = z0.map(z => z + bt), zin = z0.map(z => z + bt * sn);
   const zT = [base[0] + stack[0], base[1] + stack[1]];
   // The model's spine, moved into place: its joint line (x = xl) onto the chord, its round out from it.
   const spineAt = (x, z) => { const a = (d.zo - z) * k * Lc / (2 * s), b = (d.xl - x) * k; return [CL[0] + c[0] * a + B[0] * b, CL[1] + c[1] * a + B[1] * b]; };
@@ -11006,6 +11034,13 @@ function obBuild(gl, spec){
       }
     }
   }
+  // (the endpaper over each joint, and what lies on it: at the board's height from its edge outwards, down to the
+  // leaves' at the spine's edge, bending smoothly between, as paper does: obEase)
+  const hingeZ = (side, x) => {
+    const sg = side ? 1 : -1, w = sg * (xB[side] - xJ[side]);
+    const t = w > 1e-9 ? Math.min(1, Math.max(0, sg * (x - xJ[side]) / w)) : sg * (x - xJ[side]) > 0 ? 1 : 0;
+    return zin[side] + (base[side] - zin[side]) * obEase(t);
+  };
   // Where the leaves of the two sides meet: on the back of the leaves (the chord, inside the spine), as far along it as
   // the book is open (with no leaves on one side, as while the first or the last leaf goes over, at that side's end).
   const fE = !stack[0] ? 0 : !stack[1] ? 1 : f, tf = Math.min(1, Math.max(0, (bt * sn + fE * (Lc - 2 * bt * sn)) / Lc));
@@ -11021,12 +11056,17 @@ function obBuild(gl, spec){
      of the picture where it goes in among the leaves (as the free endpaper there carries on from it). */
   // (under leaves, only where it shows beyond their head and tail: under them, hidden anyway, it showed through the
   // pages lying on it near the ends of the book, where it's seen at a slant and comes out very thin on the screen)
-  const obHinge = (xb, xg, z, side, under) => {
+  const obHinge = (xb, xg, side, under) => {
     const m = obNew(), YB = Y + sq;
-    const ub = side ? 1 - hingeA[1] : hingeA[0], ug = side ? 0 : 1, xa = Math.min(xb, xg), xz = Math.max(xb, xg), ua = xa === xb ? ub : ug, uz = xa === xb ? ug : ub;
-    const v = y => (YB - y) / (2 * YB);
-    for (const [y0, y1] of under ? [[YB, Y], [-Y, -YB]] : [[YB, -YB]])
-      obQuad(m, [[xa, y0, z], [xz, y0, z], [xz, y1, z], [xa, y1, z]], [0, 0, 1], [[ua, v(y0)], [uz, v(y0)], [uz, v(y1)], [ua, v(y1)]]);
+    const ub = side ? 1 - hingeA[1] : hingeA[0], ug = side ? 0 : 1, xa0 = Math.min(xb, xg), xz0 = Math.max(xb, xg), ua0 = xa0 === xb ? ub : ug, uz0 = xa0 === xb ? ug : ub;
+    const v = y => (YB - y) / (2 * YB), N = OB_EASE_N;
+    // (in strips across, as it bends)
+    for (let i = 0; i < N; i++) {
+      const xa = xa0 + (xz0 - xa0) * i / N, xz = xa0 + (xz0 - xa0) * (i + 1) / N, ua = ua0 + (uz0 - ua0) * i / N, uz = ua0 + (uz0 - ua0) * (i + 1) / N;
+      const za = hingeZ(side, xa), zz = hingeZ(side, xz), n = [-(zz - za) / Math.max(1e-9, xz - xa), 0, 1];
+      for (const [y0, y1] of under ? [[YB, Y], [-Y, -YB]] : [[YB, -YB]])
+        obQuad(m, [[xa, y0, za], [xz, y0, zz], [xz, y1, zz], [xa, y1, za]], n, [[ua, v(y0)], [uz, v(y0)], [uz, v(y1)], [ua, v(y1)]]);
+    }
     return m;
   };
   // A part of the model, moved: its triangles that keep (by their middle), each point through place().
@@ -11090,7 +11130,7 @@ function obBuild(gl, spec){
   if (G > 0) {
     const YB = Y + sq, cover = obNew(), coverL = obNew(), coverR = obNew(), ends = obNew(), lipTop = obNew(), tile = rimTile(data) * k, arc0 = spineArc(data);
     for (const [side, sg] of [[0, -1], [1, 1]]) {
-      const us = side ? 0.002 : 0.998, xe = xB[side], x0 = xJ[side], ze = z0[side], zb = base[side], Cc = side ? CR : CL;
+      const us = side ? 0.002 : 0.998, xe = xB[side], x0 = xJ[side], ze = z0[side], zb = base[side], zn = zin[side], Cc = side ? CR : CL;
       // (the spine's outline at its end, open, from its edge by this board outwards, halfway round)
       const arc = arc0.map(([x, z]) => { const zc = Math.max(-d.zo, Math.min(d.zo, z)), q = spineAt(x, zc); return [q[0], q[1], 1, (zc + d.zo) / (2 * d.zo)]; });
       if (!side) arc.reverse();
@@ -11099,16 +11139,17 @@ function obBuild(gl, spec){
       if (arc.length) arc[0] = C;
       const cap = p => [sg * (p[0] - xe) / tile, Math.min(1, Math.max(0, (p[1] - ze) / Math.max(1e-6, zb - ze)))];
       // (the joint, from the board's edge to the spine's; none where the board's edge is right at the spine)
-      if (Math.abs(x0 - xe) >= 1e-6) obJointFill(jc, ends, [xe, ze, 1], [xe, zb, 1], C, [x0, zb, 1], arc, YB, tx, cap, obGrooveR(d) * k, [-sg, 0]);
-      if (zb - Cc[1] > 1e-6) for (const [ya, yb] of [[Y, YB], [-YB, -Y]])
-        obQuad(cover, [[x0, ya, Cc[1]], [x0, yb, Cc[1]], [x0, yb, zb], [x0, ya, zb]], [sg, 0, 0], [[us, 0], [us, 0], [us, 1], [us, 1]]);
+      const inTop = []; for (let i = 1; i < OB_EASE_N; i++) { const x = x0 + (xe - x0) * i / OB_EASE_N; inTop.push([x, hingeZ(side, x), 1]); }
+      if (Math.abs(x0 - xe) >= 1e-6) obJointFill(jc, ends, [xe, ze, 1], [xe, zb, 1], C, [x0, zn, 1], arc, YB, tx, cap, obGrooveR(d) * k, [-sg, 0], inTop);
+      if (zn - Cc[1] > 1e-6) for (const [ya, yb] of [[Y, YB], [-YB, -Y]])
+        obQuad(cover, [[x0, ya, Cc[1]], [x0, yb, Cc[1]], [x0, yb, zn], [x0, ya, zn]], [sg, 0, 0], [[us, 0], [us, 0], [us, 1], [us, 1]]);
       // On the inside, beyond the heads (and tails) of the leaves, the covering turned in over the end of the spine
       // (as a headcap is) from the inside of the board, rounding down onto the back of the leaves by the headband:
       // so the board's end meets the spine across all its thickness, not at its outside edge only.
       const cin = side ? [-c[0], -c[1]] : [c[0], c[1]], up = [-B[0], -B[1]];
-      const h = (x0 - Cc[0]) * up[0] + (zb - Cc[1]) * up[1], e = (x0 - Cc[0]) * cin[0] + (zb - Cc[1]) * cin[1];
+      const h = (x0 - Cc[0]) * up[0] + (zn - Cc[1]) * up[1], e = (x0 - Cc[0]) * cin[0] + (zn - Cc[1]) * cin[1];
       if (h > 1e-5) {
-        const w = Math.max(e, 0) + h * 1.2, P = [Cc[0] + cin[0] * w, Cc[1] + cin[1] * w], K = [P[0] + up[0] * h, P[1] + up[1] * h], In = [x0, zb];
+        const w = Math.max(e, 0) + h * 1.2, P = [Cc[0] + cin[0] * w, Cc[1] + cin[1] * w], K = [P[0] + up[0] * h, P[1] + up[1] * h], In = [x0, zn];
         const curve = []; for (let i = 0; i <= 12; i++) { const t = i / 12; curve.push([0, 1].map(q => (1 - t) * (1 - t) * P[q] + 2 * t * (1 - t) * K[q] + t * t * In[q])); }
         const poly = [[Cc[0], Cc[1], 1], ...curve.map(p => [p[0], p[1], 1])];
         for (const [ya, yb] of [[Y, YB], [-YB, -Y]]) {
@@ -11173,13 +11214,15 @@ function obBuild(gl, spec){
     // With no leaves on it, the leaf going over lies down on the board itself; and the endpaper pasted on the board
     // carries on over the joint to where the leaves begin.
     if (!stack[side]) {
-      rest[side] = () => zi; lay[side] = u => [Gb[0] + sg * u, zi]; lus[side] = Array.from({length:25}, (v, i) => Wp * i / 24);
-      if (inside[side] >= 0 && Math.abs(Gb[0] - xB[side]) > 1e-5) add(obHinge(xB[side], Gb[0], zi, side), Object.assign(mat(inside[side]), {repeat:false}));
+      rest[side] = u => hingeZ(side, Gb[0] + sg * u); lay[side] = u => [Gb[0] + sg * u, hingeZ(side, Gb[0] + sg * u)];
+      // (finely over the joint, where the endpaper runs down it, for the leaf coming down to lie just on it)
+      lus[side] = [...Array.from({length:12}, (v, i) => Math.abs(xB[side] - Gb[0]) * i / 12), ...Array.from({length:25}, (v, i) => Math.abs(xB[side] - Gb[0]) + (Wp - Math.abs(xB[side] - Gb[0])) * i / 24)];
+      if (inside[side] >= 0 && Math.abs(Gb[0] - xB[side]) > 1e-5) add(obHinge(xB[side], Gb[0], side), Object.assign(mat(inside[side]), {repeat:false}));
       continue;
     }
     // (the endpaper over the joint, from the board's edge in to the leaves)
     const pg = side ? spec.pR : spec.pL, paged = pg >= 1 && pg <= RD.n;
-    if (inside[side] >= 0 && Math.abs(xB[side] - x0) > 1e-5) add(obHinge(xB[side], x0, zi, side, paged), Object.assign(mat(inside[side]), {repeat:false}));
+    if (inside[side] >= 0 && Math.abs(xB[side] - x0) > 1e-5) add(obHinge(xB[side], x0, side, paged), Object.assign(mat(inside[side]), {repeat:false}));
     // The stack of leaves on it, its top leaf (the page) curving down into the gutter, drawn in to the fold.
     const top = Math.max(zT[side], zG + 0.0005), g = 0.05 * Wp + 1.2 * (top - zG) + 0.02, us = [];
     const gw = Math.max(g, 2.5 * Math.abs(Gb[0])), X = u => sg * u + Gb[0] * Math.pow(Math.max(0, 1 - u / gw), 2);
@@ -11190,7 +11233,7 @@ function obBuild(gl, spec){
     for (let i = 1; i <= 6; i++) if (gs + (Wp - gs) * i / 6 > gs + 1e-9) us.push(gs + (Wp - gs) * i / 6);
     // (over the board it stays on the board, going down to the fold only past the board's edge)
     const zAt0 = u => u >= g ? top : zG + (top - zG) * Math.sqrt(Math.max(0, 1 - Math.pow(1 - u / g, 2)));
-    const zAt = u => sg * (X(u) - x0) > 0 ? Math.max(zAt0(u), zi + 0.0003) : zAt0(u);
+    const zAt = u => sg * (X(u) - x0) > 0 ? Math.max(zAt0(u), hingeZ(side, X(u)) + 0.0003) : zAt0(u);
     const slope = u => { const e = 1e-4; return (zAt(Math.min(Wp, u + e)) - zAt(Math.max(0, u - e))) / (2 * e); };
     const shadeAt = u => 1 - 0.3 * Math.pow(Math.max(0, 1 - u / (g * 1.4)), 2);
     rest[side] = zAt; shades[side] = shadeAt; lay[side] = u => [X(u), zAt(u)]; lus[side] = us;
@@ -11209,7 +11252,7 @@ function obBuild(gl, spec){
     // The leaves' edges at the head and the tail: over the board, from the top leaf down to the board; and by the
     // spine, from the top leaf and the fold down to the back of the leaves (the chord), from this side's board to the fold.
     const ue = Math.max(0, sg * x0), over = [ue, ...us.filter(u => u > ue)], near = [...us.filter(u => u < ue), ue].reverse();
-    const t0 = side ? 1 - bt * sn / Lc : bt * sn / Lc, backPath = [[x0, zi]];
+    const t0 = side ? 1 - bt * sn / Lc : bt * sn / Lc, backPath = [[x0, zin[side]]];
     for (let i = 0; i <= 12; i++) backPath.push(chordAt(t0 + (tf - t0) * i / 12));
     const topPath = [...near.map(u => [X(u), zAt(u)]), Gb];
     // (each leaf reaches a page's width out from its fold: the bottom one, folded by the board, as far out as the board
@@ -11225,7 +11268,7 @@ function obBuild(gl, spec){
     if ((side ? gR : gL) < 1) continue;
     for (const [y, m] of [[Y, faces.head], [-Y, faces.tail]]) {
       // (not shaded darker down the stack: the model's page edges aren't, and they'd darken as the cover landed)
-      between(m, y, over.map(u => [u >= Wp ? xFt : X(u), zAt(u)]), over.map(u => [botAt(u), zi]), 1, 1, side, zF);
+      between(m, y, over.map(u => [u >= Wp ? xFt : X(u), zAt(u)]), over.map(u => [botAt(u), hingeZ(side, botAt(u))]), 1, 1, side, zF);
       between(m, y, topPath, backPath, 1, 1, side, zF);
     }
     const corners = [[Y, zi], [Y, top], [-Y, top], [-Y, zi]];
@@ -11244,7 +11287,13 @@ function obBuild(gl, spec){
     while (b - a > 1) { const m = (a + b) >> 1; if ((P[m][0] < x) === inc) a = m; else b = m; }
     const q = (x - P[a][0]) / ((P[b][0] - P[a][0]) || 1e-9); return P[a][1] + (P[b][1] - P[a][1]) * q;
   };
-  return {parts, made, zc:zG, geo:{Wp, Y, zG, gx:Gb[0], rest, shades, lay, lus, surfAt}};
+  // (which way the top of each side faces, u along it: as its page is lit, for a leaf lifting off it or coming down on it)
+  const faceAt = [0, 1].map(side => lay[side] && (u => {
+    const sg = side ? 1 : -1, uu = Math.max(u, 1e-3), e = 1e-4, a = lay[side](Math.max(0, uu - e)), b = lay[side](Math.min(Wp, uu + e));
+    const n = [-sg * (b[1] - a[1]), 0, sg * (b[0] - a[0])], l = Math.hypot(...n) || 1;
+    return n.map(v => v / l);
+  }));
+  return {parts, made, zc:zG, geo:{Wp, Y, zG, gx:Gb[0], rest, shades, lay, lus, surfAt, faceAt}};
 }
 function obFree(gl){ if (RD.ob && RD.ob.gl === gl) for (const [kind, obj] of RD.ob.made) gl['delete' + kind](obj); RD.ob = null; }
 // A leaf going over in 3D (rdAnimate): {kind:'curl', mode:'anim', anim:{d3:true, ...}, u: how far it's gone, 0 to 1}.
@@ -11372,6 +11421,12 @@ function obLeaf(gl, L, t, sp){
     const du = [a[0] - b[0], a[1] - b[1], a[2] - b[2]], dy = [c[0] - d[0], c[1] - d[1], c[2] - d[2]];
     let n = [du[1] * dy[2] - du[2] * dy[1], du[2] * dy[0] - du[0] * dy[2], du[0] * dy[1] - du[1] * dy[0]];
     const l = (Math.hypot(...n) || 1) * sg; n = n.map(v => v / l);
+    // (facing just as the page it lifts off from, and the one it comes down as, as it lies on them: its own shape,
+    // worked out point by point, faced a little differently in the gutter, and the shading there shifted as it landed)
+    const f0 = G.faceAt[sg > 0 ? 1 : 0], f1 = G.faceAt[sg > 0 ? 0 : 1];
+    if (b0 > 0 && f0) { const q = f0(us[i]); n = n.map((v, k) => v + (q[k] - v) * b0); }
+    if (b1 > 0 && f1) { const q = f1(us[i]); n = n.map((v, k) => v + (-q[k] - v) * b1); }
+    { const l2 = Math.hypot(...n) || 1; n = n.map(v => v / l2); }
     const o = 3 * (j * cols + i);
     for (let q = 0; q < 3; q++) { lf.nf[o + q] = n[q]; lf.nb[o + q] = -n[q]; }
     const u = us[i], s = Math.pow(Math.max(0.05, 1 - (1 - (shS ? shS(u) : 1)) * r0 - (1 - (shE ? shE(u) : 1)) * r1), 2.2);
