@@ -10949,7 +10949,7 @@ function obBuild(gl, spec){
   const fcL = spec.fc === undefined ? fOf(spec.kL) : spec.fc, fcR = spec.fc === undefined ? fOf(spec.kR) : spec.fc;
   // (never thinner than one leaf: about a two-thousandth of the page's height, as the flat reader has a leaf)
   const OB_LEAF = 0.0005, stack = [hasL ? Math.max(OB_LEAF * gL, Tn * fcL) : 0, hasR ? Math.max(OB_LEAF * gR, Tn * (1 - fcR)) : 0];
-  const rest = [null, null], shades = [null, null], lay = [null, null];   // (lay: where the top leaf of each side lies, u along it from the fold)   // (the top of each side, and its shade, for the leaf to lie on)
+  const rest = [null, null], shades = [null, null], lay = [null, null], lus = [null, null];   // (lus: where along each side's top leaf its points are, for the leaf's shadow to lie on it just as it is)   // (lay: where the top leaf of each side lies, u along it from the fold)   // (the top of each side, and its shade, for the leaf to lie on)
   const Y = 0.5, s = Tn * 0.5 + bt;   // (s: half the closed book's thickness, the width of the spine from joint to joint)
   // How far into the book it's open (0 at the front, 1 at the back); sn is 0 at either end and 1 in the middle.
   const f = (fcL + fcR) / 2, sn = Math.sin(Math.PI * f);
@@ -11156,7 +11156,7 @@ function obBuild(gl, spec){
     // With no leaves on it, the leaf going over lies down on the board itself; and the endpaper pasted on the board
     // carries on over the joint to where the leaves begin.
     if (!stack[side]) {
-      rest[side] = () => zi; lay[side] = u => [Gb[0] + sg * u, zi];
+      rest[side] = () => zi; lay[side] = u => [Gb[0] + sg * u, zi]; lus[side] = Array.from({length:25}, (v, i) => Wp * i / 24);
       if (inside[side] >= 0 && Math.abs(Gb[0] - xB[side]) > 1e-5) add(obHinge(xB[side], Gb[0], zi, side), Object.assign(mat(inside[side]), {repeat:false}));
       continue;
     }
@@ -11175,7 +11175,7 @@ function obBuild(gl, spec){
     const zAt = u => sg * (X(u) - x0) > 0 ? Math.max(zAt0(u), zi + 0.0003) : zAt0(u);
     const slope = u => { const e = 1e-4; return (zAt(Math.min(Wp, u + e)) - zAt(Math.max(0, u - e))) / (2 * e); };
     const shadeAt = u => 1 - 0.3 * Math.pow(Math.max(0, 1 - u / (g * 1.4)), 2);
-    rest[side] = zAt; shades[side] = shadeAt; lay[side] = u => [X(u), zAt(u)];
+    rest[side] = zAt; shades[side] = shadeAt; lay[side] = u => [X(u), zAt(u)]; lus[side] = us;
     const page = obNew();
     for (const u of us) {
       // (facing as the page's own curve does, drawn in towards the fold as it is there, as the leaf landing on it faces
@@ -11228,7 +11228,7 @@ function obBuild(gl, spec){
     while (b - a > 1) { const m = (a + b) >> 1; if ((P[m][0] < x) === inc) a = m; else b = m; }
     const q = (x - P[a][0]) / ((P[b][0] - P[a][0]) || 1e-9); return P[a][1] + (P[b][1] - P[a][1]) * q;
   };
-  return {parts, made, zc:zG, geo:{Wp, Y, zG, gx:Gb[0], rest, shades, lay, surfAt}};
+  return {parts, made, zc:zG, geo:{Wp, Y, zG, gx:Gb[0], rest, shades, lay, lus, surfAt}};
 }
 function obFree(gl){ if (RD.ob && RD.ob.gl === gl) for (const [kind, obj] of RD.ob.made) gl['delete' + kind](obj); RD.ob = null; }
 // A leaf going over in 3D (rdAnimate): {kind:'curl', mode:'anim', anim:{d3:true, ...}, u: how far it's gone, 0 to 1}.
@@ -11294,11 +11294,19 @@ function obLeaf(gl, L, t, sp){
     lf.front = face(lf.bNf, uvF, idxF); lf.back = face(lf.bNb, uvB, idxB);
     // Its shadow: a sheet lying over the pages on both sides (following them down into the gutter), each point as
     // dark as the leaf above it makes it, laid over them by multiplying.
-    const xs = [], spos = [], sn = [], sc = [], si = [], NS = 36;
-    for (let i = -NS; i <= NS; i++) xs.push(Math.sign(i) * G.Wp * Math.pow(Math.abs(i) / NS, 1.4));
-    const surf0 = G.surfAt;
-    for (let i = 0; i < xs.length; i++) xs[i] += G.gx;
-    for (let j = 0; j < rows; j++) for (const x of xs) { spos.push(x, G.Y - 2 * G.Y * j / NV, surf0(x)); sn.push(0, 0, 1); sc.push(1, 1, 1, 1); }
+    // (made of just the points the pages under it are made of, from the outer edge of the left one to that of the right
+    // one: so that it lies exactly on them, all the way out to their edges, and all the way down into the gutter; laid
+    // out a page's width either side of the fold, it stopped short of the right page's edge wherever the fold isn't in
+    // the middle, and cutting straight across where the pages curve down into the gutter, it went under them there,
+    // leaving a strip unshaded)
+    const pts = [];
+    for (const side of [0, 1]) {
+      const f = G.lay[side], us0 = G.lus[side]; if (!f || !us0) continue;
+      const q = us0.map(u => f(u)); if (!side) q.reverse();
+      for (const pt of q) if (!pts.length || Math.abs(pt[0] - pts[pts.length - 1][0]) > 1e-7) pts.push(pt);
+    }
+    const xs = pts.map(q => q[0]), spos = [], sn = [], sc = [], si = [];
+    for (let j = 0; j < rows; j++) for (const [x, z] of pts) { spos.push(x, G.Y - 2 * G.Y * j / NV, z); sn.push(0, 0, 1); sc.push(1, 1, 1, 1); }
     const sw = xs.length;
     for (let j = 0; j < NV; j++) for (let i = 0; i < sw - 1; i++) { const a = j * sw + i; si.push(a, a + 1, a + sw + 1, a, a + sw + 1, a + sw); }
     lf.sxs = xs; lf.scol = new Float32Array(sc);
