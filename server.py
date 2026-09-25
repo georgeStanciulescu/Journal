@@ -10343,15 +10343,45 @@ function rd3Tex(gl, slot, key, entry, w, draw){
 }
 // Page p as the reader draws it lying on the left (x 0) or the right (x RD.W) of the book open at spread k, with
 // the page edges beside it where they lie over its place (e).
-const rd3PageTex = (gl, slot, p, x, k, e) => rd3Tex(gl, slot, [p, x, RD.W, k, e.t].join(), RD.cache.get(p) || null, RD.W, c => {
+const rd3PageTex = (gl, slot, p, x, k, e) => { const g = rd3Curve(k); return rd3Tex(gl, slot, [p, x, RD.W, k, e.t, g ? 'curve' : ''].join(), RD.cache.get(p) || null, RD.W, c => {
   c.translate(-x, 0);
   // Under it, the inside of the board, just as the reader draws it: it shows where the page's corners dip into the
   // spine (left empty, those would show black on the model).
   const left = x === 0, b = rdMargin();
   rdFill(c, RD.look && (left ? RD.look.insideL : RD.look.insideR), left ? -b : RD.W, -b, RD.W + b, RD.H + 2 * b, READER_BOARD);
   if (e.inn) rdEdges(c, left ? e.inn : 2 * RD.W - e.inn, e.t, left);
-  rdSlotAt(c, p, x, k);
-});
+  if (!g) { rdSlotAt(c, p, x, k); return; }
+  // Opening onto the 3D book (or closing from it): the page as the open book will show it, so that nothing changes as
+  // the one takes over from the other: all of it, and shaded in the gutter just as the open book's page is there by
+  // its curve down into the fold and the light on it (worked out from the open book's own shape, made ready before
+  // the cover swings), rather than with the flat reader's painted crease, which the open book doesn't have.
+  if (p < 1 || p > RD.n) return;
+  rdPage(c, p, x, true, true);
+  rd3GutterShade(c, g, left);
+}); };
+// The open 3D book's shape at spread k, if it's the one made (for a cover swinging open onto it, or shut from it).
+const rd3Curve = k => obActive() && RD.ob && RD.ob.geo && typeof RD.ob.key === 'string' && RD.ob.key.startsWith(k + '|' + k + '|') ? RD.ob.geo : null;
+// The light the 3D book's shader gives a surface facing n (as the reader shows it, face on).
+function obLight(n){
+  const l = Math.hypot(...n) || 1, [x, y, z] = n.map(v => v / l), L1 = [-0.45, 0.7, 0.55], L2 = [0.7, 0.1, 0.35];
+  const dot = L => Math.max(0, (x * L[0] + y * L[1] + z * L[2]) / Math.hypot(...L));
+  return 0.34 * (0.55 + 0.45 * (0.5 + 0.5 * y)) + 0.88 * dot(L1) + 0.26 * dot(L2);
+}
+// Shades a page (on the left, or the right) as the open 3D book's page is shaded by its gutter: by its own shade
+// there and by the light on it as it curves down into the fold, against the light on it lying flat.
+function rd3GutterShade(c, G, left){
+  const side = left ? 0 : 1, lay = G.lay[side], sh = G.shades[side], sg = left ? -1 : 1; if (!lay) return;
+  const W = RD.W, H = RD.H, flat = obLight([0, 0, 1]), e = 1e-4;
+  c.save(); c.globalCompositeOperation = 'multiply';
+  for (let px = 0, calm = 0; px < W && calm < 8; px++) {
+    const u = (px + 0.5) / H, a = lay(Math.max(0, u - e)), b = lay(u + e);
+    const r = Math.min(1, (sh ? sh(u) : 1) * Math.pow(obLight([-sg * (b[1] - a[1]), 0, sg * (b[0] - a[0])]) / flat, 1 / 2.2));
+    calm = r > 0.998 ? calm + 1 : 0;
+    const v = Math.round(255 * r); c.fillStyle = `rgb(${v},${v},${v})`;
+    c.fillRect(left ? W - px - 1 : W + px, 0, 1, H);
+  }
+  c.restore();
+}
 // The page edges in the board's margin (e.out wide), as the reader draws them on the left or the right.
 const rd3EdgeTex = (gl, slot, e, left) => rd3Tex(gl, slot, [e.t, e.out, left].join(), null, e.out, c => {
   if (left) { c.translate(e.out, 0); rdEdges(c, e.inn, e.t, true); } else { c.translate(-2 * RD.W, 0); rdEdges(c, 2 * RD.W - e.inn, e.t, false); }
@@ -10904,11 +10934,16 @@ function obBuild(gl, spec){
   const mm = M3.cache.get(RD.model), data = mm.data, gpu = m3Gpu(gl, mm);
   const Tn = Math.max(0.01, d.zi / d.py1), bt = Math.max(0.004, (d.zo - d.zi) / (2 * d.py1));
   const n = Math.max(1, RD.n), fOf = kk => Math.min(1, Math.max(0, 2 * kk / n));
-  const hasL = 2 * spec.kL >= 1 && spec.pL >= 1, hasR = 2 * spec.kR + 1 <= RD.n && spec.pR <= RD.n;
+  // (a side whose first leaf is coming down on it, or whose last leaf is lifting off it, as the first or last leaf goes
+  // over: its stack there all the same, as thin as its share of the leaf's way over has it, gL and gR, from nothing to
+  // one leaf's thickness, so that it's there just as the book will lie once the leaf is down, and gone just as it lay
+  // before the leaf lifted: with no stack at all, the leaf came down on the board, and the book changed as it landed)
+  const hasL = (2 * spec.kL >= 1 && spec.pL >= 1) || spec.gL !== undefined, hasR = (2 * spec.kR + 1 <= RD.n && spec.pR <= RD.n) || spec.gR !== undefined;
+  const gL = spec.gL === undefined ? 1 : spec.gL, gR = spec.gR === undefined ? 1 : spec.gR;
   // (while a leaf goes over, how far in the book lies open goes on smoothly from where it was to where it'll be,
   // as the leaf goes: spec.fc)
   const fcL = spec.fc === undefined ? fOf(spec.kL) : spec.fc, fcR = spec.fc === undefined ? fOf(spec.kR) : spec.fc;
-  const stack = [hasL ? Math.max(0.0015, Tn * fcL) : 0, hasR ? Math.max(0.0015, Tn * (1 - fcR)) : 0];
+  const stack = [hasL ? Math.max(0.0015 * gL, Tn * fcL) : 0, hasR ? Math.max(0.0015 * gR, Tn * (1 - fcR)) : 0];
   const rest = [null, null], shades = [null, null], lay = [null, null];   // (lay: where the top leaf of each side lies, u along it from the fold)   // (the top of each side, and its shade, for the leaf to lie on)
   const Y = 0.5, s = Tn * 0.5 + bt;   // (s: half the closed book's thickness, the width of the spine from joint to joint)
   // How far into the book it's open (0 at the front, 1 at the back); sn is 0 at either end and 1 in the middle.
@@ -11146,7 +11181,9 @@ function obBuild(gl, spec){
       obVert(page, [X(u), Y, z], nn, [tu, 0], shadeAt(u)); obVert(page, [X(u), -Y, z], nn, [tu, 1], shadeAt(u));
     }
     for (let i = 0; i < us.length - 1; i++) { const a = 2 * i; page.idx.push(a, a + 1, a + 3, a, a + 3, a + 2); }
-    add(page, {tex:obPage(gl, side ? spec.pR : spec.pL), colour:[1, 1, 1, 1], lod:OB_LOD});
+    // (no page on a stack that isn't there yet, or is gone once the leaf is off it: the inside of the board shows)
+    const pg = side ? spec.pR : spec.pL;
+    if (pg >= 1 && pg <= RD.n) add(page, {tex:obPage(gl, pg), colour:[1, 1, 1, 1], lod:OB_LOD});
     // The leaves' edges at the head and the tail: over the board, from the top leaf down to the board; and by the
     // spine, from the top leaf and the fold down to the back of the leaves (the chord), from this side's board to the fold.
     const ue = Math.max(0, sg * x0), over = [ue, ...us.filter(u => u > ue)], near = [...us.filter(u => u < ue), ue].reverse();
@@ -11196,7 +11233,12 @@ function obSpec(t){
   // smoothly, all the way over, rather than at its start and its end.
   const n = Math.max(1, RD.n), fo = kk => Math.min(1, Math.max(0, 2 * kk / n)), p = ease(Math.min(1, Math.max(0, t.u || 0)));
   const fc = fo(k) + (fo(k + t.dir * step) - fo(k)) * p;
-  return t.dir > 0 ? {kL:k, kR:k + step, pL:L, pR:under, front, back, fc} : {kL:k - step, kR:k, pL:under, pR:R, front, back, fc};
+  // (a side with no leaves at the one end of the turn and some at the other: its stack comes or goes with the leaf)
+  const left = kk => 2 * kk >= 1, right = kk => 2 * kk + 1 <= RD.n, sp = t.dir > 0 ? {kL:k, kR:k + step, pL:L, pR:under, front, back, fc} : {kL:k - step, kR:k, pL:under, pR:R, front, back, fc};
+  const k2 = k + t.dir * step;
+  if (left(k) !== left(k2)) sp.gL = left(k2) ? p : 1 - p;
+  if (right(k) !== right(k2)) sp.gR = right(k2) ? p : 1 - p;
+  return sp;
 }
 /* The leaf going over. It's fixed at the spine and goes over round it, bending as paper does: its outer edge goes
    ahead as it lifts (as a page taken by its edge does), the part by the spine following, so that in the middle of its
@@ -11335,7 +11377,7 @@ function obLeaf(gl, L, t, sp){
 // Draws the open book in 3D over the reader, where the flat one would be (and a leaf going over, if one is). False
 // if it can't be.
 // What the open book's shape is made for: made again only when it changes.
-const obKey = (sp, t) => [sp.kL, sp.kR, sp.pL, sp.pR, t && obLeafTurn(t) ? t.dir + ':' + (t.step || 1) : '', sp.fc === undefined ? '' : sp.fc.toFixed(5), RD.n, RD.W, RD.H, RD.dpr, RD.look && RD.look.headband,
+const obKey = (sp, t) => [sp.kL, sp.kR, sp.pL, sp.pR, t && obLeafTurn(t) ? t.dir + ':' + (t.step || 1) : '', sp.fc === undefined ? '' : sp.fc.toFixed(5), sp.gL, sp.gR, RD.n, RD.W, RD.H, RD.dpr, RD.look && RD.look.headband,
   [sp.pL, sp.pR].map(p => { const e = RD.cache.get(p); return e ? e.pgen + ':' + e.canvas.width : '-'; }).join()].join('|');
 /* The open book at spread k made ready before a cover swings open onto it (its shape, and its pages on the graphics
    card), so that it takes over from the model the moment the cover lies down. Made only then, it held everything up
@@ -11715,11 +11757,11 @@ function rdGutter(c, x, strength){
 }
 // One page, laid flat with its left edge at x (0 for the left page, W for the right); with shade (0 to 1) as much of
 // the shade of the spine as it's in (all of it, lying flat; none, or true, for a leaf that's lifted).
-function rdPage(c, p, x, shade){
+function rdPage(c, p, x, shade, whole){
   const W = RD.W, H = RD.H;
   const src = rdSrc(p), e = src.pdf && RD.cache.get(p);
   c.save();
-  rdPageShape(c, x); c.clip();
+  if (!whole) { rdPageShape(c, x); c.clip(); }   // (whole: all of it, square, as the 3D book lays it on its curve)
   if (src.end) rdFill(c, RD.look.endsheet, x, 0, W, H, READER_PAPER);   // the endpaper's decorated side
   else rdPaper(c, x, 0, W, H);
   if (e) {
