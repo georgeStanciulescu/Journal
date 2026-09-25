@@ -9107,6 +9107,23 @@ void main(){
   return gl;
 }
 // A model's triangles, handed to the graphics card the first time it's drawn.
+// A part's triangles, each wound so that its front is the side its normals face (as the open book's are: obMesh). The
+// shader lights the side of a triangle that faces the viewer, turning its normal round when that's the back; a part
+// whose triangles are wound the other way round from its normals (as the spine of the journal's book models is) would
+// be lit as if from behind, darker than the open book, which is made from the same normals, shows it.
+function m3Wound(p){
+  const P = p.pos, Nn = p.nrm, I = p.idx;
+  if (!P || !Nn || !I) return I;
+  const out = I.slice();
+  for (let t = 0; t + 2 < out.length; t += 3) {
+    const a = out[t], b = out[t + 1], c = out[t + 2];
+    const e1 = [0, 1, 2].map(j => P[3 * b + j] - P[3 * a + j]), e2 = [0, 1, 2].map(j => P[3 * c + j] - P[3 * a + j]);
+    const cr = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]];
+    let dot = 0; for (const i of [a, b, c]) for (let j = 0; j < 3; j++) dot += cr[j] * Nn[3 * i + j];
+    if (dot < 0) { out[t + 1] = c; out[t + 2] = b; }
+  }
+  return out;
+}
 function m3Gpu(gl, m){
   if (m.gpu) return m.gpu;
   const textures = new Map(), made = m.made = [];   // everything made on the graphics card, so it can be freed
@@ -9118,7 +9135,7 @@ function m3Gpu(gl, m){
       gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, size, gl.FLOAT, false, 0, 0);
     };
     attr(0, p.pos, 3); attr(1, p.nrm, 3); attr(2, p.col, 4, [1, 1, 1, 1]); attr(3, p.uv, 2, [0, 0, 0, 0]);
-    const ib = gl.createBuffer(); made.push(['Buffer', ib]); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, p.idx, gl.STATIC_DRAW);
+    const ib = gl.createBuffer(); made.push(['Buffer', ib]); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, m3Wound(p), gl.STATIC_DRAW);
     gl.bindVertexArray(null);
     let tex = null;
     if (p.tex) {
