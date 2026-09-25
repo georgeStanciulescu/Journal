@@ -11126,7 +11126,10 @@ function obBuild(gl, spec){
     const top = Math.max(zT[side], zG + 0.0005), g = 0.05 * Wp + 1.2 * (top - zG) + 0.02, us = [];
     const gw = Math.max(g, 2.5 * Math.abs(Gb[0])), X = u => sg * u + Gb[0] * Math.pow(Math.max(0, 1 - u / gw), 2);
     for (let i = 0; i <= 28; i++) us.push(g * Math.pow(i / 28, 1.6));
-    for (let i = 1; i <= 6; i++) us.push(g + (Wp - g) * i / 6);
+    // (and finely on over the rest of the gutter's shade, which fades out by 1.4g: its shade is worked out point by point,
+    // and far apart there, it came out lighter than the leaf that lands on it shows it, which is shaded finely)
+    const gs = Math.min(Wp, 1.45 * g); for (let i = 1; i <= 10; i++) us.push(g + (gs - g) * i / 10);
+    for (let i = 1; i <= 6; i++) if (gs + (Wp - gs) * i / 6 > gs + 1e-9) us.push(gs + (Wp - gs) * i / 6);
     // (over the board it stays on the board, going down to the fold only past the board's edge)
     const zAt0 = u => u >= g ? top : zG + (top - zG) * Math.sqrt(Math.max(0, 1 - Math.pow(1 - u / g, 2)));
     const zAt = u => sg * (X(u) - x0) > 0 ? Math.max(zAt0(u), zi + 0.0003) : zAt0(u);
@@ -11135,7 +11138,11 @@ function obBuild(gl, spec){
     rest[side] = zAt; shades[side] = shadeAt; lay[side] = u => [X(u), zAt(u)];
     const page = obNew();
     for (const u of us) {
-      const z = zAt(u), nn = [-sg * slope(Math.max(u, 1e-3)), 0, 1], tu = side ? u / Wp : 1 - u / Wp;
+      // (facing as the page's own curve does, drawn in towards the fold as it is there, as the leaf landing on it faces
+      // point for point: the curve's slope along u alone, it was lit a little differently there, and the leaf's shade
+      // changed as it became the page)
+      const uu = Math.max(u, 1e-3), e = 1e-4, dx = (X(Math.min(Wp, uu + e)) - X(Math.max(0, uu - e))) / (2 * e);
+      const z = zAt(u), nn = [-sg * slope(uu), 0, sg * dx], tu = side ? u / Wp : 1 - u / Wp;
       obVert(page, [X(u), Y, z], nn, [tu, 0], shadeAt(u)); obVert(page, [X(u), -Y, z], nn, [tu, 1], shadeAt(u));
     }
     for (let i = 0; i < us.length - 1; i++) { const a = 2 * i; page.idx.push(a, a + 1, a + 3, a, a + 3, a + 2); }
@@ -11198,13 +11205,16 @@ function obSpec(t){
    pages it lies on or comes down on, it lies on them instead: it starts as the top page of the one side, and ends as
    the top page of the other. Its two sides are drawn separately, each with its own page, each seen only from its
    own side. Made once for each turn; its shape is worked out afresh for each picture. */
-const OB_NU = 56, OB_NV = 14, OB_LIFT = 0.0025;
+const OB_NU = 96, OB_NV = 14, OB_LIFT = 0.0025;
 function obLeaf(gl, L, t, sp){
   const ob = RD.ob, G = ob.geo, sg = t.dir > 0 ? 1 : -1, NU = OB_NU, NV = OB_NV, cols = NU + 1, rows = NV + 1;
   let lf = ob.leaf;
   if (!lf || lf.sg !== sg) {
     const us = [], uvF = [], uvB = [], idxF = [], idxB = [], N = cols * rows;
-    for (let i = 0; i <= NU; i++) us.push(G.Wp * Math.pow(i / NU, 1.5));   // (closer together by the spine, where it bends most)
+    // (closer together by the spine, where it bends most, and where the pages curve down into the gutter, shaded as
+    // they go: as finely as the pages it lifts off and lands on are there, so that its shade, worked out point by
+    // point, is theirs as it lifts off and comes down, not a little lighter or darker)
+    for (let i = 0; i <= NU; i++) us.push(G.Wp * Math.pow(i / NU, 1.9));
     for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) {
       const a = us[i] / G.Wp, v = j / NV;
       // (each side's page laid on as it lies on its own side of the book: a right-hand page from the spine outwards)
@@ -11266,7 +11276,10 @@ function obLeaf(gl, L, t, sp){
       const o = 3 * (j * cols + i);
       // (drawn in to the fold near the spine, as the pages are, and reaching just as far out as they do)
       const xx = x + G.gx * Math.pow(Math.max(0, 1 - us[i] / (0.3 * G.Wp)), 2);
-      const lift = OB_LIFT * Math.min(1, us[i] / 0.02);
+      // (a hair clear of the pages under it as it goes, but none as it lifts off and comes down, so that it starts just
+      // where its page lay and ends just where the page it becomes will lie, rather than dropping onto it once it's
+      // down; drawn in front of them where it lies on them: see the polygon offset below)
+      const lift = OB_LIFT * Math.min(1, us[i] / 0.02) * (1 - Math.max(b0, b1));
       let px = xx, pz = Math.max(z, surf(xx) + lift);
       if (b0 > 0) { const q = lay0(us[i]); px += (q[0] - px) * b0; pz += (q[1] + lift - pz) * b0; }
       if (b1 > 0) { const q = lay1(us[i]); px += (q[0] - px) * b1; pz += (q[1] + lift - pz) * b1; }
@@ -11311,12 +11324,13 @@ function obLeaf(gl, L, t, sp){
     gl.disable(gl.POLYGON_OFFSET_FILL); gl.depthMask(true); gl.disable(gl.BLEND);
   }
   gl.enable(gl.CULL_FACE); gl.cullFace(gl.BACK); gl.frontFace(gl.CCW);
+  gl.enable(gl.POLYGON_OFFSET_FILL); gl.polygonOffset(-1, -4);   // (in front of the page it lies on, as it lifts off and lands)
   for (const [mesh, pg] of [[lf.front, sp.front], [lf.back, sp.back]]) {
     const tex = obPage(gl, pg);
     gl.bindTexture(gl.TEXTURE_2D, tex); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     m3Part(gl, L, {vao:mesh.vao, count:mesh.count, base:[1, 1, 1, 1], cut:0, lit:true, tex, lod:OB_LOD});
   }
-  gl.disable(gl.CULL_FACE);
+  gl.disable(gl.POLYGON_OFFSET_FILL); gl.disable(gl.CULL_FACE);
 }
 // Draws the open book in 3D over the reader, where the flat one would be (and a leaf going over, if one is). False
 // if it can't be.
