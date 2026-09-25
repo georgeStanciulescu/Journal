@@ -11429,6 +11429,7 @@ const obLeafTurn = t => !!t && t.kind === 'curl' && t.mode === 'anim' && !!t.ani
 // What lies where: the book open at its spread; or, with a leaf going over, each side as it'll be with the leaf off
 // it (the side it leaves already showing the page under it, the side it goes to still the page it'll cover), and the
 // leaf's two sides (front, the page going over; back, the page on its other side). As the flat book has them.
+const OB_STEPS = 8;
 function obSpec(t){
   const k = RD.spread, L = 2 * k, R = 2 * k + 1;
   if (!obLeafTurn(t)) return {kL:k, kR:k, pL:L, pR:R};
@@ -11436,7 +11437,9 @@ function obSpec(t){
   // How far into the book it lies open, going on from the spread it was open at to the one it'll be open at just
   // as the leaf goes over (as obLeaf has it go), so that the spine and the leaves on each side move with it,
   // smoothly, all the way over, rather than at its start and its end.
-  const n = Math.max(1, RD.n), fo = kk => Math.min(1, Math.max(0, 2 * kk / n)), p = ease(Math.min(1, Math.max(0, t.u || 0)));
+  // (in OB_STEPS even steps, the leaf itself going over smoothly: from one frame to the next the book changes by far less
+  // than a pixel, and built afresh every frame, it kept the processor busy all the while a leaf went over)
+  const n = Math.max(1, RD.n), fo = kk => Math.min(1, Math.max(0, 2 * kk / n)), p = Math.round(ease(Math.min(1, Math.max(0, t.u || 0))) * OB_STEPS) / OB_STEPS;
   const fc = fo(k) + (fo(k + t.dir * step) - fo(k)) * p;
   // (a side with no leaves at the one end of the turn and some at the other: its stack comes or goes with the leaf)
   const left = kk => 2 * kk >= 1, right = kk => 2 * kk + 1 <= RD.n, sp = t.dir > 0 ? {kL:k, kR:k + step, pL:L, pR:under, front, back, fc} : {kL:k - step, kR:k, pL:under, pR:R, front, back, fc};
@@ -11520,6 +11523,9 @@ function obLeaf(gl, L, t, sp){
   // (at its start it's just as its page lay, and at its end just as it'll lie, point for point, so that the print on
   // it doesn't shift as it lifts off or comes down: the bend worked out below is eased into and out of those)
   const lay0 = G.lay[sg > 0 ? 1 : 0], lay1 = G.lay[sg > 0 ? 0 : 1], b0 = lay0 ? 1 - sm(0, 0.22, p) : 0, b1 = lay1 ? sm(0.78, 1, p) : 0;
+  // (what's the same all the way down the leaf, u along it, worked out once for each u rather than for every point)
+  const L0 = b0 > 0 ? us.map(u => lay0(u)) : null, L1 = b1 > 0 ? us.map(u => lay1(u)) : null;
+  const lifts = us.map(u => OB_LIFT * Math.min(1, u / 0.02) * (1 - Math.max(b0, b1))), draw = us.map(u => G.gx * Math.pow(Math.max(0, 1 - u / (0.3 * G.Wp)), 2));
   for (let j = 0; j < rows; j++) {
     const y = G.Y - 2 * G.Y * j / NV, e = Math.min(Math.PI, Math.max(0, aE + lead * 0.5 * cs * y / G.Y));
     let x = 0, z = G.zG;
@@ -11530,50 +11536,59 @@ function obLeaf(gl, L, t, sp){
       }
       const o = 3 * (j * cols + i);
       // (drawn in to the fold near the spine, as the pages are, and reaching just as far out as they do)
-      const xx = x + G.gx * Math.pow(Math.max(0, 1 - us[i] / (0.3 * G.Wp)), 2);
+      const xx = x + draw[i];
       // (a hair clear of the pages under it as it goes, but none as it lifts off and comes down, so that it starts just
       // where its page lay and ends just where the page it becomes will lie, rather than dropping onto it once it's
       // down; drawn in front of them where it lies on them: see the polygon offset below)
-      const lift = OB_LIFT * Math.min(1, us[i] / 0.02) * (1 - Math.max(b0, b1));
+      const lift = lifts[i];
       let px = xx, pz = Math.max(z, surf(xx) + lift);
-      if (b0 > 0) { const q = lay0(us[i]); px += (q[0] - px) * b0; pz += (q[1] + lift - pz) * b0; }
-      if (b1 > 0) { const q = lay1(us[i]); px += (q[0] - px) * b1; pz += (q[1] + lift - pz) * b1; }
+      if (L0) { const q = L0[i]; px += (q[0] - px) * b0; pz += (q[1] + lift - pz) * b0; }
+      if (L1) { const q = L1[i]; px += (q[0] - px) * b1; pz += (q[1] + lift - pz) * b1; }
       pos[o] = px; pos[o + 1] = y; pos[o + 2] = Math.max(pz, surf(px) + lift);
     }
   }
   // Which way each side faces, from the shape; and its shade, in the gutter as it lies on either side.
-  const P = (i, j) => { const o = 3 * (Math.min(rows - 1, Math.max(0, j)) * cols + Math.min(cols - 1, Math.max(0, i))); return [pos[o], pos[o + 1], pos[o + 2]]; };
+  const at = (i, j) => 3 * (Math.min(rows - 1, Math.max(0, j)) * cols + Math.min(cols - 1, Math.max(0, i)));
   const r0 = 1 - sm(0, 0.18, p), r1 = sm(0.82, 1, p), shS = G.shades[sg > 0 ? 1 : 0], shE = G.shades[sg > 0 ? 0 : 1];
+  // (facing just as the page it lifts off from, and the one it comes down as, as it lies on them: its own shape,
+  // worked out point by point, faced a little differently in the gutter, and the shading there shifted as it landed)
+  const f0 = G.faceAt[sg > 0 ? 1 : 0], f1 = G.faceAt[sg > 0 ? 0 : 1];
+  const F0 = b0 > 0 && f0 ? us.map(u => f0(u)) : null, F1 = b1 > 0 && f1 ? us.map(u => f1(u)) : null;
+  const shade = us.map(u => Math.pow(Math.max(0.05, 1 - (1 - (shS ? shS(u) : 1)) * r0 - (1 - (shE ? shE(u) : 1)) * r1), 2.2));
   for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) {
-    const a = P(i + 1, j), b = P(i - 1, j), c = P(i, j - 1), d = P(i, j + 1);
-    const du = [a[0] - b[0], a[1] - b[1], a[2] - b[2]], dy = [c[0] - d[0], c[1] - d[1], c[2] - d[2]];
-    let n = [du[1] * dy[2] - du[2] * dy[1], du[2] * dy[0] - du[0] * dy[2], du[0] * dy[1] - du[1] * dy[0]];
-    const l = (Math.hypot(...n) || 1) * sg; n = n.map(v => v / l);
-    // (facing just as the page it lifts off from, and the one it comes down as, as it lies on them: its own shape,
-    // worked out point by point, faced a little differently in the gutter, and the shading there shifted as it landed)
-    const f0 = G.faceAt[sg > 0 ? 1 : 0], f1 = G.faceAt[sg > 0 ? 0 : 1];
-    if (b0 > 0 && f0) { const q = f0(us[i]); n = n.map((v, k) => v + (q[k] - v) * b0); }
-    if (b1 > 0 && f1) { const q = f1(us[i]); n = n.map((v, k) => v + (-q[k] - v) * b1); }
-    { const l2 = Math.hypot(...n) || 1; n = n.map(v => v / l2); }
+    const a = at(i + 1, j), b = at(i - 1, j), c = at(i, j - 1), d = at(i, j + 1);
+    const u0 = pos[a] - pos[b], u1 = pos[a + 1] - pos[b + 1], u2 = pos[a + 2] - pos[b + 2], y0 = pos[c] - pos[d], y1 = pos[c + 1] - pos[d + 1], y2 = pos[c + 2] - pos[d + 2];
+    let n0 = u1 * y2 - u2 * y1, n1 = u2 * y0 - u0 * y2, n2 = u0 * y1 - u1 * y0;
+    const l = (Math.hypot(n0, n1, n2) || 1) * sg; n0 /= l; n1 /= l; n2 /= l;
+    if (F0) { const q = F0[i]; n0 += (q[0] - n0) * b0; n1 += (q[1] - n1) * b0; n2 += (q[2] - n2) * b0; }
+    if (F1) { const q = F1[i]; n0 += (-q[0] - n0) * b1; n1 += (-q[1] - n1) * b1; n2 += (-q[2] - n2) * b1; }
+    const l2 = Math.hypot(n0, n1, n2) || 1; n0 /= l2; n1 /= l2; n2 /= l2;
     const o = 3 * (j * cols + i);
-    for (let q = 0; q < 3; q++) { lf.nf[o + q] = n[q]; lf.nb[o + q] = -n[q]; }
-    const u = us[i], s = Math.pow(Math.max(0.05, 1 - (1 - (shS ? shS(u) : 1)) * r0 - (1 - (shE ? shE(u) : 1)) * r1), 2.2);
-    lf.col.set([s, s, s, 1], 4 * (j * cols + i));
+    lf.nf[o] = n0; lf.nf[o + 1] = n1; lf.nf[o + 2] = n2; lf.nb[o] = -n0; lf.nb[o + 1] = -n1; lf.nb[o + 2] = -n2;
+    const s = shade[i], oc = 4 * (j * cols + i); lf.col[oc] = lf.col[oc + 1] = lf.col[oc + 2] = s; lf.col[oc + 3] = 1;
   }
   // The shadow it casts on the pages under it and beside it: the light a little from the left, so a leaf standing
   // up throws its shadow a little to the right; deep where the leaf is close over the page, soft and faint where
   // it's high above. It comes and goes with the leaf's first and last stretch, so there's no jump as it starts and lands.
+  // (worked out only while it shows; each point of the leaf darkening only the points of the pages within its reach,
+  // found by halving, the pages' points running from left to right: every point against every other, it took most of
+  // the time a leaf going over took)
   const fadeS = sm(0, 0.1, p) * (1 - sm(0.9, 1, p)), sx = lf.sxs, sw = sx.length, hs = new Float32Array(cols), xp = new Float32Array(cols);
-  for (let j = 0; j < rows; j++) {
-    for (let i = 0; i < cols; i++) { const o = 3 * (j * cols + i), h = Math.max(0, pos[o + 2] - surf(pos[o])); hs[i] = h; xp[i] = pos[o] + 0.35 * h; }
-    for (let q = 0; q < sw; q++) {
-      let dark = 0;
+  if (fadeS > 0) {
+    let sorted = true; for (let q = 1; q < sw; q++) if (sx[q] < sx[q - 1]) { sorted = false; break; }
+    const dark = new Float32Array(sw), first = x => { let a = 0, b = sw; while (a < b) { const m = (a + b) >> 1; if (sx[m] < x) a = m + 1; else b = m; } return a; };
+    for (let j = 0; j < rows; j++) {
+      for (let i = 0; i < cols; i++) { const o = 3 * (j * cols + i), h = Math.max(0, pos[o + 2] - surf(pos[o])); hs[i] = h; xp[i] = pos[o] + 0.35 * h; }
+      dark.fill(0);
       for (let i = 0; i < cols; i++) {
-        const h = hs[i], sg2 = 0.012 + 0.22 * h, d = (sx[q] - xp[i]) / sg2;
-        if (d > -3 && d < 3) { const w = Math.exp(-h / 0.55 - d * d); if (w > dark) dark = w; }
+        const h = hs[i], sg2 = 0.012 + 0.22 * h, base = Math.exp(-h / 0.55);
+        for (let q = sorted ? first(xp[i] - 3 * sg2) : 0; q < sw; q++) {
+          const d = (sx[q] - xp[i]) / sg2;
+          if (d >= 3) { if (sorted) break; continue; }
+          if (d > -3) { const w = base * Math.exp(-d * d); if (w > dark[q]) dark[q] = w; }
+        }
       }
-      const v = Math.pow(1 - 0.45 * fadeS * dark, 2.2);
-      lf.scol.set([v, v, v, 1], 4 * (j * sw + q));
+      for (let q = 0; q < sw; q++) { const v = Math.pow(1 - 0.45 * fadeS * dark[q], 2.2), o = 4 * (j * sw + q); lf.scol[o] = lf.scol[o + 1] = lf.scol[o + 2] = v; lf.scol[o + 3] = 1; }
     }
   }
   for (const [b, data] of [[lf.bPos, pos], [lf.bNf, lf.nf], [lf.bNb, lf.nb], [lf.bCol, lf.col], [lf.bScol, lf.scol]]) { gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferSubData(gl.ARRAY_BUFFER, 0, data); }
