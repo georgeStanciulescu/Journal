@@ -9124,10 +9124,46 @@ function m3Wound(p){
   }
   return out;
 }
+/* A part's triangles cut evenly into smaller ones (each into four, at the middles of its sides, as many times as it
+   takes to bring its sides under M3_FINE), just as it looks. A board or a leaf is a few triangles as big as the book,
+   and seen edge on, as a cover swinging open is from some way off, such a triangle comes out a line on the screen
+   hundreds of pixels long, and its depth goes so far wrong along it that it was drawn over what lay in front of it:
+   the endpaper inside a board showed through the joint, from top to bottom. */
+const M3_FINE = 0.06;
+function m3Fine(p){
+  if (!p.pos || !p.idx || !p.idx.length) return p;
+  const P = Array.from(p.pos), I = p.idx, len = (a, b) => Math.hypot(P[3 * a] - P[3 * b], P[3 * a + 1] - P[3 * b + 1], P[3 * a + 2] - P[3 * b + 2]);
+  let most = 0; for (let t = 0; t + 2 < I.length; t += 3) most = Math.max(most, len(I[t], I[t + 1]), len(I[t + 1], I[t + 2]), len(I[t + 2], I[t]));
+  const times = Math.min(4, Math.max(0, Math.ceil(Math.log2(most / M3_FINE))));
+  if (!times) return p;
+  const attrs = [['pos', 3], ['nrm', 3], ['col', 4], ['uv', 2]].filter(([k]) => p[k]).map(([k, n]) => [k, n, Array.from(p[k])]);
+  let tris = Array.from(I);
+  for (let r = 0; r < times; r++) {
+    const mid = new Map(), next = [];
+    const m = (a, b) => {
+      const key = a < b ? a + ',' + b : b + ',' + a; if (mid.has(key)) return mid.get(key);
+      let at = -1;
+      for (const [k, n, A] of attrs) { at = A.length / n; for (let j = 0; j < n; j++) A.push((A[n * a + j] + A[n * b + j]) / 2); }
+      mid.set(key, at); return at;
+    };
+    for (let t = 0; t + 2 < tris.length; t += 3) {
+      const a = tris[t], b = tris[t + 1], c = tris[t + 2], ab = m(a, b), bc = m(b, c), ca = m(c, a);
+      next.push(a, ab, ca, ab, b, bc, ca, bc, c, ab, bc, ca);
+    }
+    tris = next;
+  }
+  const out = Object.assign({}, p, {idx:new Uint32Array(tris)});
+  for (const [k, n, A] of attrs) {
+    if (k === 'nrm') for (let i = 0; i < A.length; i += 3) { const l = Math.hypot(A[i], A[i + 1], A[i + 2]) || 1; A[i] /= l; A[i + 1] /= l; A[i + 2] /= l; }
+    out[k] = new Float32Array(A);
+  }
+  return out;
+}
 function m3Gpu(gl, m){
   if (m.gpu) return m.gpu;
   const textures = new Map(), made = m.made = [];   // everything made on the graphics card, so it can be freed
-  m.gpu = m.data.map(p => {
+  m.gpu = m.data.map(p0 => {
+    const p = m3Fine(p0);
     const vao = gl.createVertexArray(); gl.bindVertexArray(vao); made.push(['VertexArray', vao]);
     const attr = (loc, data, size, fallback) => {
       if (!data) { gl.disableVertexAttribArray(loc); gl.vertexAttrib4f(loc, ...fallback); return; }
@@ -10467,6 +10503,11 @@ function rd3Joint(gl, L, m, d, side, th, open, lean, G){
     Math.min(1, Math.max(0, 1 - ((p[0] - bi[0]) * out[0] + (p[1] - bi[1]) * out[1]) / Math.max(1e-6, bt)))];
   const inTop = []; for (let i = OB_EASE_N - 1; i >= 1; i--) inTop.push(P(i / OB_EASE_N));
   obJointFill(cover, ends, bo, bi, C, pg, arc, T, tx, cap, obGrooveR(d) * (1 - c) / 2, [-along[0], -along[1]], inTop);
+  // (and closed along its length, from the spine's edge down to the back of the leaves, covered as the joint is: open,
+  // a hairline where the covering meets the spine let the inside of the book, the endpaper and the leaves, show
+  // through, from top to bottom; the board's edge is closed by rd3Backing) (none once the two come together, as the
+  // board comes down: so thin, it would be drawn as a line over what lies in front of it)
+  if (Math.abs(C[1] - pg[1]) > 0.25 * bt) strip(cover, C, pg, tx.uS);
   const ins = side > 0 ? part('insideFront', 'endpaper') : part('insideBack', 'endpaper');
   draw(cover, side > 0 ? part('front', 'board') : part('back', 'front', 'board'), [0.3, 0.08, 0.08, 1]); draw(paste, ins, [0.8, 0.77, 0.7, 1]); draw(ends, part('rim', 'board'), [0.3, 0.08, 0.08, 1]);
   gl.bindVertexArray(null);
@@ -10695,6 +10736,48 @@ function rimTile(data){
   }
   return lo && hi && Math.abs(hi[1] - lo[1]) > 1e-6 ? Math.abs((hi[0] - lo[0]) / (hi[1] - lo[1])) : 1;
 }
+/* Behind the seams of the model's outside, where the spine meets each board: a narrow strip of the covering just inside
+   it on either side, the board's (moved as the board is, uSwing 1) and the spine's (as the spine is, uSwing 2). The
+   pieces meeting there are placed apart, and along the hairline between them the inside of the book showed through,
+   the endpapers and the leaves, from top to bottom; now it's the covering that shows, as it would. */
+function rd3Backing(gl, L, m, d){
+  const gpu = m3Gpu(gl, m), part = (...names) => { for (const n of names) { const p = gpu.find(q => q.name === n); if (p) return p; } return null; };
+  // (stopping a hair short of the ends of the book, so as not to lie along the boards' and the spine's ends there)
+  const bt = d.zo - d.zi, e = 0.15 * bt, w = 3 * bt, T = d.top - e, made = [];
+  const draw = (mesh, p, swing) => {
+    if (!mesh.idx.length || !p) return;
+    const g = obMesh(gl, made, mesh); gl.uniform1i(L.uSwing, swing);
+    m3Part(gl, L, {vao:g.vao, count:g.count, base:p.base || [1, 1, 1, 1], cut:0, lit:p.lit !== false, tex:p.tex || null});
+  };
+  // (the boards: along the edge by the spine, a hair in from the outside)
+  for (const zs of [1, -1]) {
+    const b = obNew(), u = zs > 0 ? 0.006 : 0.994;
+    obQuad(b, [[d.xl + w, T, zs * (d.zo - e)], [d.xl, T, zs * (d.zo - e)], [d.xl, -T, zs * (d.zo - e)], [d.xl + w, -T, zs * (d.zo - e)]], [0, 0, zs], [[u, 0], [u, 0], [u, 1], [u, 1]]);
+    draw(b, zs > 0 ? part('front', 'board') : part('back', 'front', 'board'), 1);
+  }
+  // (the spine: its round near each edge, a hair in, with the spine's own picture where it is)
+  const sp = m.data.find(q => q.name === 'spine'), gs = part('spine');
+  if (sp && gs && sp.uv) {
+    let top = -Infinity; for (let i = 1; i < sp.pos.length; i += 3) top = Math.max(top, sp.pos[i]);
+    const vtx = []; for (let i = 0; i < sp.pos.length / 3; i++) vtx.push({x:sp.pos[3 * i], y:sp.pos[3 * i + 1], z:sp.pos[3 * i + 2], u:sp.uv[2 * i], v:sp.uv[2 * i + 1]});
+    const near = (x, z, hi) => vtx.filter(q => (q.y > 0) === hi).reduce((a, q) => { const dd = Math.hypot(q.x - x, q.z - z); return !a || dd < a.dd ? {q, dd} : a; }, null).q;
+    const arc = spineArc(m.data); if (arc.length > 4) {
+      const cx = arc.reduce((a, q) => Math.max(a, q[0]), -Infinity) + Math.abs(arc[0][1]), s = obNew();
+      for (const ends of [arc.slice(0, 4), arc.slice(-4).reverse()]) {
+        // (moved in by e, towards the middle of the book, back from the edge)
+        const P = ends.map(([x, z]) => { const l = Math.hypot(cx - x, z) || 1; return [x + (cx - x) / l * e, z - z / l * e, x, z]; });
+        for (let i = 0; i < P.length - 1; i++) {
+          const a = P[i], b = P[i + 1], ta = near(a[2], a[3], true), tb = near(b[2], b[3], true), ba = near(a[2], a[3], false), bb = near(b[2], b[3], false);
+          const yin = y => y - Math.sign(y) * e;
+          obQuad(s, [[a[0], yin(ta.y), a[1]], [b[0], yin(tb.y), b[1]], [b[0], yin(bb.y), b[1]], [a[0], yin(ba.y), a[1]]], [a[0] - cx, 0, a[1]], [[ta.u, ta.v], [tb.u, tb.v], [bb.u, bb.v], [ba.u, ba.v]]);
+        }
+      }
+      draw(s, gs, 2);
+    }
+  }
+  gl.uniform1i(L.uSwing, 0); gl.bindVertexArray(null);
+  for (const [kind, obj] of made) gl['delete' + kind](obj);
+}
 // Draws the book (closed, or with t, a cover swinging) and shows it. False when it can't be drawn this way.
 function rd3Draw(t){
   const d = RD.b3, m = RD.model && M3.cache.get(RD.model);
@@ -10752,6 +10835,7 @@ function rd3Draw(t){
     m3Part(gl, L, p.name === 'spineWindow' ? Object.assign({}, p, {tex:rdWindowTex(gl, open >= 0 ? open : RD.spread)}) : p);
   }
   gl.uniform1i(L.uSwing, 0); gl.uniform2f(L.uUv, 1, 0);
+  rd3Backing(gl, L, m, d);
   if (d3) rd3Headband(gl, L, m, d, om);
   if (G > 0 && o > 0) rd3Joint(gl, L, m, d, side, th, o * (d.zo - d.zi + 0.002 * 2 * d.py1) / (2 * d.zo), Math.sin(th) / RD3_NEAR, G);
   if (o > 0 && open >= 0 && open <= K) {
