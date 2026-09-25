@@ -11616,29 +11616,42 @@ function readerWant(){
    so that the graphics card's own half-size copy of it is just the screen's sharpness and, taken a little towards the
    larger one (OB_LOD), stays crisp at a slant; and the two lying open, as much taller again as the book's been brought
    nearer (in steps, so a little nearer doesn't draw them again), up to what the graphics card and memory allow. */
-const OB_LOD = -0.5, OB_HI_MAX = 4096, OB_HI_AREA = 12e6, OB_HI_ALL = 48e6;   // (most pixels a side, a page, and all together)
+const OB_LOD = -0.5, OB_HI_MAX = 4096, OB_HI_AREA = 12e6, OB_HI_ALL = 80e6;   // (most pixels a side, a page, and all together)
 function obHiH(open){
   const base = 2 * RD.H * Math.min(window.devicePixelRatio || 1, 2), z = open ? Math.max(1, RV.zoom) : 1;
   return Math.round(base * Math.pow(2, Math.ceil(Math.log2(z) * 2 - 1e-6) / 2));
 }
+/* Which pages are drawn for the 3D book, most wanted first, and which of them as sharp as the book's been brought near
+   (near): the two lying open; then the two the next leaf going over shows, the way the book was last leafed through
+   (RD.dir: its other side, and the page under it), drawn just as sharp beforehand, so that they're as sharp as the
+   pages lying open from the moment the leaf starts over, not only once it's down; then the two the leaf after that
+   shows; and the two the other way. (Pages are drawn only while the book lies still: drawing one holds everything up
+   for a moment, and a leaf going over would stutter.) */
+function obHiPlan(at){
+  const f = (RD.dir || 1) > 0, ahead = f ? [at + 1, at + 2] : [at - 2, at - 3], then = f ? [at + 3, at + 4] : [at - 4, at - 5];
+  const back = f ? [at - 2, at - 3] : [at + 1, at + 2];
+  return [...[at - 1, at, ...ahead].map(p => ({p, near:true})), ...[...then, ...back].map(p => ({p, near:false}))]
+    .filter(({p}) => p >= 1 && p <= RD.n && rdSrc(p).pdf);
+}
 function obHiWant(at){
   RD.hiQueue = [];
   if (!obActive() || RD.spread < 0 || RD.spread > lastSpread()) return;
-  // the two lying open, then those a leaf going over would show (its two sides, and the page under it), either way
-  for (const p of [at - 1, at, at + 1, at - 2, at + 2, at - 3]) {
-    if (p < 1 || p > RD.n || !rdSrc(p).pdf) continue;
-    const h = obHiH(p === at || p === at - 1), e = RD.hi.get(p);
+  const plan = obHiPlan(at);
+  for (const {p, near} of plan) {
+    const h = obHiH(near), e = RD.hi.get(p);
     if (!e || e.h < h) RD.hiQueue.push([p, h]);
   }
-  for (const p of [...RD.hi.keys()]) if (p < at - 3 || p > at + 2) RD.hi.delete(p);
+  const keep = new Set(plan.map(q => q.p));
+  for (const p of [...RD.hi.keys()]) if (!keep.has(p)) RD.hi.delete(p);
 }
-// Too many pixels altogether: those furthest from where it's open go back to the size a page is drawn at, or go.
+// Too many pixels altogether: those least wanted go (the ones as sharp as the book's been brought near are kept).
 function obHiTrim(at){
   let all = 0; for (const e of RD.hi.values()) all += e.canvas.width * e.canvas.height;
-  const far = [...RD.hi.keys()].sort((a, b) => Math.abs(b - at + 0.5) - Math.abs(a - at + 0.5));
-  for (const p of far) {
+  const plan = obHiPlan(at), rank = new Map(plan.map((q, i) => [q.p, q.near ? -1 : i]));
+  const least = [...RD.hi.keys()].sort((a, b) => (rank.has(b) ? rank.get(b) : 1e9) - (rank.has(a) ? rank.get(a) : 1e9));
+  for (const p of least) {
     if (all <= OB_HI_ALL) break;
-    if (p === at || p === at - 1) continue;
+    if (rank.get(p) === -1) continue;
     const e = RD.hi.get(p); all -= e.canvas.width * e.canvas.height; RD.hi.delete(p);
   }
 }
@@ -11660,6 +11673,9 @@ async function readerRenderHi(p, h){
   if (old && old.h >= h) return;
   RD.hi.set(p, {canvas:c, h});
   obHiTrim(2 * Math.max(0, Math.min(lastSpread(), RD.spread)) + 1);
+  // (put on the graphics card now, while the book lies still, rather than as the leaf that shows it starts over:
+  // a picture this size takes a moment to put there, and the leaf would stutter as it lifted)
+  const g = m3Gl(); if (g && obActive() && RD.hi.has(p)) obPage(g, p);
   drawReader();
 }
 async function readerPump(){
@@ -12297,6 +12313,7 @@ function rdLater(dir, held){
   if (held ? !RD.next.length : RD.next.length < 3) RD.next.push(dir);
 }
 function rdTurn(dir, cy, held){
+  RD.dir = dir;   // (the way it's being leafed through: the pages that way are drawn sharp first, obHiPlan)
   const on = RD.turn;
   if (on && on.mode === 'anim') { if (on.anim.done === 'turn') { rdLater(dir, held); return; } rdSettle(); }
   const m = rdMove(dir);
