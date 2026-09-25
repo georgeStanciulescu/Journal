@@ -10496,13 +10496,19 @@ function rd3Joint(gl, L, m, d, side, th, open, lean, G){
   // (the endpaper over the joint: the board's own picture of it from beside the spine, true to size, the same way round)
   { const hA = rd3HingeA(d, RD.spread >= 0 && RD.spread <= lastSpread() ? RD.spread : side > 0 ? 0 : lastSpread(), side < 0), ub = side > 0 ? hA : 1 - hA, ug = side > 0 ? 1 : 0;
     const seg = (a, b, xa, xb) => { const n = [b[1] - a[1], 0, a[0] - b[0]]; if (Math.hypot(n[0], n[2]) > 1e-9) obQuad(paste, [[a[0], T * a[2], a[1]], [b[0], T * b[2], b[1]], [b[0], -T * b[2], b[1]], [a[0], -T * a[2], a[1]]], n, [[xa, 0], [xb, 0], [xb, 1], [xa, 1]]); };
-    for (let i = 0; i < OB_EASE_N; i++) { const sa = i / OB_EASE_N, sb = (i + 1) / OB_EASE_N; seg(P(sa), P(sb), ub + (ug - ub) * sa, ub + (ug - ub) * sb); }
+    // (its picture shared out along the whole of it, from the board over the spine's edge and down to the pages, rather
+    // than its last sliver drawn out down the drop, which came out streaked)
+    const down = Math.abs(C[1] - pg[1]) > 0.25 * bt, pts = []; for (let i = 0; i <= OB_EASE_N; i++) pts.push(P(i / OB_EASE_N));
+    if (down) pts.push(pgi);
+    const run = [0]; for (let i = 1; i < pts.length; i++) run.push(run[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
+    const U = i => ub + (ug - ub) * run[i] / Math.max(1e-12, run[run.length - 1]);
+    for (let i = 0; i < pts.length - 1; i++) seg(pts[i], pts[i + 1], U(i), U(i + 1));
     // (down from the spine's edge to the pages: none once the two come together, as the board comes down: so thin, it
     // would be drawn as a line over what lies in front of it)
-    const down = Math.abs(C[1] - pg[1]) > 0.25 * bt; if (down) seg(Ci, pgi, ug, ug);
-    // (and tucked in a little way under the first leaf, as it goes in among the leaves: ending at the fold, a sliver of
-    // the spine showed between it and the leaf, down the gutter, seen from inside the book)
-    seg(down ? pgi : Ci, [d.xl + 3 * bt, side * (d.zi - 0.3 * bt), 1], ug, ug); }
+    // (and tucked in a little way under the first leaf, as it goes in among the leaves, well under it (the leaf lies a
+    // little below the top of the leaves): ending at the fold, a sliver of the spine showed between it and the leaf,
+    // down the gutter, seen from inside the book)
+    seg(down ? pgi : Ci, [d.xl + 2 * bt, side * (d.zi - 0.9 * bt), 1], ug, ug); }
   // (the covering round the joint from the board's photo: the front's runs 0 at the spine, the back's 1)
   const tx = {uS:side > 0 ? 0.006 : 0.994, dir:side > 0 ? 1 : -1, W:d.xr - d.xl};
   if (arc.length) arc[0] = C;
@@ -10517,9 +10523,9 @@ function rd3Joint(gl, L, m, d, side, th, open, lean, G){
   // (and the board's edge by the spine, covered as the joint is, while the board stands over the spine: the joint round
   // from the board's outside to the spine's edge runs inside the board, or close along its edge, then, and the board
   // has no edge of its own there, so the inside of the board, the back of the endpaper pasted in it, showed through the
-  // joint from top to bottom; further over, the edge is closed in by the joint, and as the board comes down it would
-  // be seen edge on, and so thin, drawn as a line over what lies in front of it)
-  if (w < 0.7) strip(cover, bo, bi, tx.uS);
+  // joint from top to bottom; further over, the edge is closed in by the joint, and seen from inside the book, edge
+  // on, and so thin, it was drawn as a line over what lay in front of it)
+  if (w < 0.35) strip(cover, bo, bi, tx.uS);
   // (and behind the spine's edge, where the covering ends and the spine's round begins, both there: a narrow strip of
   // the covering just inside, from under the one to under the other, so that the hairline between them shows the
   // covering, not the inside of the board beyond)
@@ -10784,8 +10790,12 @@ function rd3Backing(gl, L, m, d){
     const arc = spineArc(m.data); if (arc.length > 4) {
       const cx = arc.reduce((a, q) => Math.max(a, q[0]), -Infinity) + Math.abs(arc[0][1]), s = obNew();
       for (const ends of [arc.slice(0, 4), arc.slice(-4).reverse()]) {
-        // (moved in by e, towards the middle of the book, back from the edge)
-        const P = ends.map(([x, z]) => { const l = Math.hypot(cx - x, z) || 1; return [x + (cx - x) / l * e, z - z / l * e, x, z]; });
+        // (moved in by e, square to the round, into it: never past the spine's edge, into the gutter, where it showed)
+        const P = ends.map(([x, z], i) => {
+          const a = ends[Math.max(0, i - 1)], b = ends[Math.min(ends.length - 1, i + 1)], tx0 = b[0] - a[0], tz = b[1] - a[1], tl = Math.hypot(tx0, tz) || 1;
+          let n = [-tz / tl, tx0 / tl]; if (n[0] * (cx - x) + n[1] * -z < 0) n = [-n[0], -n[1]];
+          return [x + n[0] * e, z + n[1] * e, x, z];
+        });
         for (let i = 0; i < P.length - 1; i++) {
           const a = P[i], b = P[i + 1], ta = near(a[2], a[3], true), tb = near(b[2], b[3], true), ba = near(a[2], a[3], false), bb = near(b[2], b[3], false);
           const yin = y => y - Math.sign(y) * e;
