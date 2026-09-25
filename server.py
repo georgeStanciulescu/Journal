@@ -11193,10 +11193,15 @@ function obBuild(gl, spec){
     const topPath = [...near.map(u => [X(u), zAt(u)]), Gb];
     // (each leaf reaches a page's width out from its fold: the bottom one, folded by the board, as far out as the board
     // lets it, the top one to where the page is shown; the fore-edge slopes between them, as the leaves fan out)
-    // (the bottom one reaching out past the top one by as much as its fold is from the top one's, round the spine: a
-    // lot, in the middle of a thick book; nothing, for a single leaf)
-    const xFt = sg * Wp, xFb = xFt + (backPath[1][0] - Gb[0]), zF = zz => xFb + (xFt - xFb) * (zz - zi) / Math.max(1e-6, top - zi);
+    // (but a stack of only a few leaves hardly fans out, and a single leaf not at all: there the bottom one reaches as far
+    // as the top one, the slope coming in as the stack thickens to a couple of dozen leaves)
+    const fan = stack[side] / (24 * OB_LEAF), xFt = sg * Wp, xFb = xFt + (backPath[1][0] + sg * Wp - xFt) * (fan >= 1 ? 1 : fan * fan * (3 - 2 * fan));
+    const zF = zz => xFb + (xFt - xFb) * (zz - zi) / Math.max(1e-6, top - zi);
     const botAt = u => x0 + (xFb - x0) * (u - ue) / Math.max(1e-6, Wp - ue);
+    // (the edges of a stack only coming with the leaf going over, not yet down on it, are left out: the leaf going over
+    // shows its own edge until it's down, and then they're there, as the book lying open has them; drawn as the stack
+    // grew under it, they showed on the endpaper before the leaf got there)
+    if ((side ? gR : gL) < 1) continue;
     for (const [y, m] of [[Y, faces.head], [-Y, faces.tail]]) {
       // (not shaded darker down the stack: the model's page edges aren't, and they'd darken as the cover landed)
       between(m, y, over.map(u => [u >= Wp ? xFt : X(u), zAt(u)]), over.map(u => [botAt(u), zi]), 1, 1, side, zF);
