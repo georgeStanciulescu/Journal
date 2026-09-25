@@ -74,10 +74,17 @@ with the arrow keys; Home and End go to the start and the end). It opens where y
 it.
 Books: drag a PDF from the writing onto a book model on the right and the two become one book:
 the model shows "Read", and reading it takes the book up: it floats from where it is to right in
-front of you, turning to show its front cover, and the cover swings open to where you left off.
-The boards, the insides of the boards and the page edges are those of the model (its photos, or
-its colours), and the pages take the book's shape. Turned back past the
-first page, or on past the last, the book closes again. The model's Open view can take the PDF
+front of you, turning to show its front cover, and the model's own cover swings open, and the pages
+are leafed through to where you left off (and it's the model again whenever the book is closed, at the front or the back). The
+boards, the insides of the boards and the page edges are those of the model (its photos, or its
+colours), and the pages take the shape of its page block. The PDF's first page is left out (the
+model is the book's cover now), and pages are numbered as the PDF numbers them. A book with
+endpapers opens at them: the endpaper pasted inside the board, and the free endpaper opposite,
+whose plain back comes before the first page (and the same at the end). Closing it (Close, or
+Escape) shuts the nearer cover (the front one in the first half of the book, the back one past
+the middle) and floats the book back to where it was taken from. Turned back past the
+first page, or on past the last, the book closes again. How fast pages and covers turn is set in the Menu (Reading books,
+Page turning speed); a click or key press while a page is still going over turns the next one once it lands. The model's Open view can take the PDF
 out again (the PDF itself stays where it is). The pages are drawn by pdf.js (from Mozilla, the same that draws PDFs in Firefox), which
 the journal downloads once from the npm registry into journal/pdfjs and checks against its
 known fingerprint; after that it needs no internet connection.
@@ -102,10 +109,19 @@ take the colour of the cover. The size starts out as the photos suggest; type it
 change it. Choose plain, gilt, gilt-top or sprinkled page edges and a rounded or flat spine,
 watch the preview, and Make model saves it in journal/models, next to the photo on the right.
 Scroll over the photo to zoom in on it (drag the photo to move about; Fit shows it whole again).
-More photos can go on the inside of the boards (only the edge showing above the page edges is
-seen; the one photo does for both), on the outer edges of the boards (one photo of a stretch of
+Endpapers are as a rebound book has them: pasted inside each board over the turned-in edges of
+the covering (which show round them), with a free leaf at the start and the end of the book.
+Choose plain, marbled, combed or stone (a made-up sheet, its pattern running on across the fold),
+none, or a photo of real endpaper on the Endpaper tab. With a photo of the inside of a board
+(the Inside tab), the endpaper is pasted over it, its edges showing round it as the turn-ins. Show open, over the preview, swings the front board
+open to see the book lying open at its endpapers. Back cover can be the front's photo, mirrored
+across the spine or just as it is, and Inside of the back can be the front board's inside (photo
+and endpaper) mirrored or just as it is. More photos can go on the outer edges of the boards (one photo of a stretch of
 edge, repeated along all six at its true size, which Edge pattern can make larger or smaller),
 and on the headcap and tailcap, which then reach a little way in over the pages.
+Paper sets what the pages are printed on as the book is read: white, cream, aged, laid or
+handmade, or a photo of real paper chosen on the Paper tab (it's stretched over each page, under
+the print, which stays as dark as it is).
 Raised bands (1 to 5) can be put across the spine. They start evenly spaced and can be moved,
 with their sliders or by dragging them on the spine's photo.
 Save draft keeps the book as it is so far in journal/book drafts, shown on the right of the
@@ -190,7 +206,7 @@ SETTING_KEYS = {"freezeKey", "indentKey", "logKey", "shotKey"}   # keyboard shor
 SETTING_RANGES = {"brandSize": (14, 60), "titleSize": (18, 80), "bodySize": (12, 36), "imgBorder": (0, 8), "zoomLevel": (1.5, 12), "shelfHeight": (150, 800),
                   "subSize": (12, 60), "shelfScale": (25, 100),
                   "topicSize": (10, 48), "listTopicSize": (8, 28), "boldAmount": (1, 8), "underlineThick": (1, 8),
-                  "taskScale": (50, 250), "taskMenuScale": (50, 250),
+                  "taskScale": (50, 250), "taskMenuScale": (50, 250), "turnSpeed": (25, 200),
                   # the PDF export (sizes in points; the picture as a % of the page's height)
                   "exportBody": (6, 16), "exportMark": (2, 12), "exportNote": (4, 16), "exportNoteName": (4, 24), "exportPicture": (15, 90)}
 SETTING_CHOICES = {"listSort": {"recent", "changes", "topic"},   # how the list of entries is shown
@@ -4058,11 +4074,18 @@ body.moving iframe,body.holding iframe{pointer-events:none}
 .reader-flight{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:2;transition:opacity .3s ease}
 .reader-flight[hidden]{display:none}
 .reader-flight.landing{opacity:0}
+.reader-flight.entering{animation:readerIn .18s ease}
+@keyframes readerIn{from{opacity:0}}
 #bookReader.flying #readerCanvas{opacity:0;pointer-events:none}
 #bookReader.flying .reader-note{align-items:flex-end;padding-bottom:10px}
 #bookReader.flying::backdrop{animation:readerDim .8s ease both}
 #bookReader.flying .reader-bar{animation:readerBarIn .5s ease .45s both}
 @keyframes readerDim{from{background:rgba(10,12,11,0)}}
+#bookReader.leaving::backdrop{animation:readerUndim .7s ease both}
+#bookReader.leaving .reader-bar{transition:opacity .3s ease;opacity:0}
+#bookReader.leaving #readerCanvas{opacity:0;pointer-events:none}
+#bookReader.leaving .reader-note{display:none}
+@keyframes readerUndim{to{background:rgba(10,12,11,0)}}
 @keyframes readerBarIn{from{opacity:0}}
 .reader-stage{position:relative;flex:1;min-height:0}
 #readerCanvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none;outline:none}
@@ -4227,6 +4250,7 @@ body.moving, body.moving *{cursor:grabbing !important;user-select:none;-webkit-u
 .book-pic.on{border:2px solid var(--accent);box-shadow:0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent)}
 .book-empty{margin:0;color:var(--muted);font-style:italic}
 .book-preview{position:relative;flex:1;min-height:200px;border:1px solid var(--rule);border-radius:10px;overflow:hidden;background:var(--paper)}
+.book-open-btn{position:absolute;top:10px;right:10px;background:var(--sheet)}
 .book-opts{flex:none;display:flex;flex-direction:column;gap:8px}
 .book-size{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px}
 .book-size label{display:flex;align-items:center;gap:6px;font-size:.92rem}
@@ -4606,6 +4630,10 @@ body:not(.can-bring-back) .arch-model-add{display:none}
     <h3 id="zoomSetTitle">Zoom and pictures on the right</h3>
     <div id="zoomRows"></div>
   </section>
+  <section aria-labelledby="readSetTitle">
+    <h3 id="readSetTitle">Reading books</h3>
+    <div id="readRows"></div>
+  </section>
   <section aria-labelledby="logSetTitle">
     <h3 id="logSetTitle">Log</h3>
     <div id="logRows"></div>
@@ -4647,6 +4675,8 @@ body:not(.can-bring-back) .arch-model-add{display:none}
         <button class="tab" type="button" role="tab" data-face="back">Back</button>
         <button class="tab" type="button" role="tab" data-face="pages">Page edges</button>
         <button class="tab" type="button" role="tab" data-face="inside">Inside</button>
+        <button class="tab" type="button" role="tab" data-face="endsheet">Endpaper</button>
+        <button class="tab" type="button" role="tab" data-face="leaf">Paper</button>
         <button class="tab" type="button" role="tab" data-face="boardEdges">Board edges</button>
         <button class="tab" type="button" role="tab" data-face="headcap">Headcap</button>
         <button class="tab" type="button" role="tab" data-face="tailcap">Tailcap</button>
@@ -4663,7 +4693,7 @@ body:not(.can-bring-back) .arch-model-add{display:none}
       <div class="book-pics" id="bookPics" aria-label="The entry's pictures"></div>
     </div>
     <div class="book-right">
-      <div class="book-preview"><canvas id="bookPreview" class="model-canvas" aria-label="The book model. Drag to turn it, scroll to zoom"></canvas><div class="model-note" id="bookPreviewNote" hidden></div></div>
+      <div class="book-preview"><canvas id="bookPreview" class="model-canvas" aria-label="The book model. Drag to turn it, scroll to zoom"></canvas><div class="model-note" id="bookPreviewNote" hidden></div><button class="tool book-open-btn" id="bookOpen" type="button" aria-pressed="false" title="See the book lying open, at its endpapers">Show open</button></div>
       <div class="book-opts">
         <div class="book-size">
           <label>Height <input id="bookH" type="number" min="0.1" step="0.1" inputmode="decimal"></label>
@@ -4674,8 +4704,15 @@ body:not(.can-bring-back) .arch-model-add{display:none}
         <p class="book-hint">Any units: only the proportions matter. They start out as the photos suggest.</p>
         <div class="book-size">
           <label>Page edges <select id="bookEdges"><option value="plain">Plain</option><option value="gilt">Gilt</option><option value="giltTop">Gilt top</option><option value="red">Sprinkled red</option><option value="photo" id="bookEdgesPhoto" disabled>From the photo</option></select></label>
+          <label title="The paper the pages are printed on, seen as the book is read">Paper <select id="bookLeaf"><option value="white">White</option><option value="cream">Cream</option><option value="aged">Aged</option><option value="laid">Laid</option><option value="rough">Handmade</option><option value="photo" id="bookLeafPhoto" disabled>From the photo</option></select></label>
+          <label title="The endpapers: pasted inside the boards, over the turned-in edges of the covering, and a free leaf at the start and the end of the book">Endpapers <select id="bookEnds"><option value="plain">Plain</option><option value="marbled">Marbled</option><option value="combed">Combed</option><option value="stone">Stone</option><option value="none">None</option><option value="photo" id="bookEndsPhoto" disabled>From the photo</option></select></label>
+          <label title="The headbands: little rolls of silk worked over in two colours, at the head and the tail of the spine, where the pages meet it">Headbands <select id="bookHeadband"><option value="red">Red and white</option><option value="green">Green and white</option><option value="blue">Blue and white</option><option value="black">Black and white</option><option value="brown">Brown and white</option><option value="redgold">Red and gold</option><option value="greengold">Green and gold</option><option value="bluegold">Blue and gold</option><option value="none">None</option></select></label>
           <label>Spine <select id="bookSpine"><option value="round">Rounded</option><option value="flat">Flat</option></select></label>
           <label>Bands <select id="bookBands"><option value="0">None</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option></select></label>
+        </div>
+        <div class="book-size">
+          <label title="What the back cover shows: its own photo (or the cover's colour), or the front's photo, flipped across the spine or just as it is">Back cover <select id="bookBackFrom"><option value="own">Its own photo</option><option value="mirror">The front, mirrored</option><option value="same">The front, as it is</option></select></label>
+          <label title="What the inside of the back board shows: the inside of the front board (its photo and endpaper), flipped across the spine or just as it is">Inside of the back <select id="bookInsideBack"><option value="mirror">The front's, mirrored</option><option value="same">The front's, as it is</option></select></label>
         </div>
         <div class="book-bands" id="bookBandPos" hidden></div>
         <div class="book-bands" id="bookRimBox" hidden><label title="How large the board edges’ photo is along the edges: 100% is its true size">Edge pattern <input id="bookRim" type="range" min="25" max="400" step="5" value="100"> <span id="bookRimPct">100%</span></label></div>
@@ -4721,6 +4758,7 @@ body:not(.can-bring-back) .arch-model-add{display:none}
     <span class="model-help reader-help">Drag a corner, click a page, or use the arrow keys</span>
     <span class="reader-pages" id="readerPages" aria-live="polite"></span>
     <label class="reader-go">Page <input id="readerGo" type="number" min="1" inputmode="numeric" disabled></label>
+    <button id="reader3d" type="button" aria-pressed="true" title="Show a book made with one of the journal's book models lying open in 3D, seen from a little below, or flat, from straight above">3D</button>
     <button id="readerClose" type="button">Close</button>
   </div>
 </dialog>
@@ -7289,6 +7327,8 @@ const SIZE_SETTINGS = [
    title:'The linked entry\u2019s name, in front of its writing at the end of the PDF'},
   {key:'exportPicture', label:'Picture height', min:15, max:90, def:33, unit:'% of a page', box:'exportRows',
    title:'How tall each picture is in the PDF (a very wide one is made narrower to fit the page, so it comes out a little shorter)'},
+  {key:'turnSpeed', label:'Page turning speed', min:25, max:200, step:5, def:100, unit:'%', box:'readRows',
+   title:'How fast pages and covers turn when you read a book: lower is slower, 100% as it was made'},
   {key:'taskMenuScale', label:'Task size in the Tasks menu', cssVar:'--task-menu-scale', css:v => v / 100, min:50, max:250, step:5, def:100, unit:'%', box:'taskRows',
    title:'The size of tasks as they appear in the Tasks menu'},
 ];
@@ -8925,7 +8965,7 @@ async function parseGlb(buf){
       parts.push({pos, nrm, col, uv, idx, base:pbr.baseColorFactor || [1, 1, 1, 1],
         tex:pbr.baseColorTexture && uv ? bitmap(pbr.baseColorTexture.index) : null,
         cut:mat.alphaMode === 'MASK' ? (mat.alphaCutoff === undefined ? .5 : mat.alphaCutoff) : 0,
-        lit:!(mat.extensions && mat.extensions.KHR_materials_unlit)});
+        lit:!(mat.extensions && mat.extensions.KHR_materials_unlit), name:String(mat.name || '')});
     }
   };
   const nodes = json.nodes || [];
@@ -9001,17 +9041,47 @@ function m3Gl(){
   const vs = `#version 300 es
 in vec3 aPos; in vec3 aNrm; in vec4 aCol; in vec2 aUv;
 uniform mat4 uProj; uniform mat4 uView;
+uniform int uSwing; uniform float uSide; uniform vec2 uHinge; uniform vec2 uCS; uniform float uOpen; uniform float uZo; uniform float uLean; uniform vec2 uWin; uniform float uWinH; uniform float uPy1; uniform vec2 uWinU;
+uniform float uGap; uniform float uShift; uniform vec2 uUv;
 out vec3 vNrm; out vec4 vCol; out vec2 vUv;
-void main(){ vNrm = mat3(uView) * aNrm; vCol = aCol; vUv = aUv; gl_Position = uProj * uView * vec4(aPos, 1.0); }`;
+void main(){
+  vec3 p = aPos, n = aNrm;
+  // A book being read: a board (on the uSide side) swings round its hinge, uCS its angle's cosine and sine, and
+  // the spine sinks away under the book as it opens (uOpen). Nothing moves with uSwing 0. As the board stands up
+  // it looks larger the nearer it comes (uLean), as if seen from close by; the rest of the book stays as it is.
+  // (uSwing 4: the back of the book showing between the boards, as wide on the left and the right, uWin, as the
+  // reader has it where the book will lie open; its left part goes over with the board it lies on.)
+  // As much of its height shows (uWinH) as the reader has showing: above, the boards hide it.
+  vec2 uv = vec2(aUv.x * uUv.x + uUv.y, aUv.y);   // (uUv: a picture squeezed across, as the endpaper is by the joint)
+  if (uSwing == 4) {
+    p.x = uHinge.x + (p.x - uHinge.x) * (p.z > 0.0 ? uWin.x : uWin.y);
+    p.y = sign(p.y) * (uPy1 + (abs(p.y) - uPy1) * uWinH); uv.y = 1.0 - (1.0 - aUv.y) * uWinH;
+    // its picture, laid across it from where it lies (uWinU: how far left of the gutter its middle is, and half its width)
+    uv.x = 0.5 + ((p.z > 0.0 ? -1.0 : 1.0) * (p.x - uHinge.x) + uWinU.x) / (2.0 * uWinU.y);
+  }
+  // (The board hinges at its joint, uGap out from the back of the pages, so that it swings clear of them; a page
+  // lying on it, uSwing 3, slides along it by uShift as it goes, to come down with its edge at the gutter.)
+  if (uSwing == 3) p.x += uShift;
+  if (uSwing == 3 || ((uSwing == 1 || uSwing == 4) && uSide * p.z > 0.0)) {
+    float hx = uHinge.x - uGap, dx = p.x - hx, dz = p.z - uHinge.y;
+    p.x = hx + dx * uCS.x - uSide * dz * uCS.y; p.z = uHinge.y + uSide * dx * uCS.y + dz * uCS.x;
+    n = vec3(n.x * uCS.x - uSide * n.z * uCS.y, n.y, uSide * n.x * uCS.y + n.z * uCS.x);
+    float k = 1.0 + uLean * max(uSide * (p.z - uHinge.y), 0.0);
+    p.x = hx + (p.x - hx) * k; p.y *= k;
+  } else if (uSwing == 2) p.z = mix(clamp(p.z, -uZo, uZo), -uSide * uZo, uOpen);   // (raised bands kept within the spine's thickness, not up through the joint)
+  vNrm = mat3(uView) * n; vCol = aCol; vUv = uv; gl_Position = uProj * uView * vec4(p, 1.0);
+}`;
   const fs = `#version 300 es
 precision highp float;
 in vec3 vNrm; in vec4 vCol; in vec2 vUv;
-uniform vec4 uBase; uniform sampler2D uTex; uniform bool uHasTex; uniform float uCut; uniform bool uLit;
+uniform vec4 uBase; uniform sampler2D uTex; uniform bool uHasTex; uniform float uCut; uniform bool uLit; uniform float uBright;
+uniform highp int uSwing; uniform highp float uWinH;
 out vec4 outColor;
 void main(){
   vec4 c = uBase * vCol;
   if (uHasTex) { vec4 t = texture(uTex, vUv); c *= vec4(pow(t.rgb, vec3(2.2)), t.a); }
   if (c.a < uCut) discard;
+  // the back of the book between the boards: in their shadow just under their edge (see rdSpine)
   vec3 n = normalize(vNrm); if (!gl_FrontFacing) n = -n;
   vec3 light = vec3(1.0);
   if (uLit) {
@@ -9019,6 +9089,7 @@ void main(){
     light = vec3(0.34) * mix(0.55, 1.0, sky)
           + vec3(0.88) * max(dot(n, normalize(vec3(-0.45, 0.7, 0.55))), 0.0)
           + vec3(0.26) * max(dot(n, normalize(vec3(0.7, 0.1, 0.35))), 0.0);
+    light *= 1.0 + uBright;
   }
   outColor = vec4(pow(c.rgb * light, vec3(1.0 / 2.2)), 1.0);
 }`;
@@ -9030,7 +9101,8 @@ void main(){
   gl.linkProgram(prog);
   if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) { M3.failed = true; return null; }
   M3.prog = prog;
-  M3.loc = Object.fromEntries(['uProj', 'uView', 'uBase', 'uTex', 'uHasTex', 'uCut', 'uLit'].map(u => [u, gl.getUniformLocation(prog, u)]));
+  M3.loc = Object.fromEntries(['uProj', 'uView', 'uBase', 'uTex', 'uHasTex', 'uCut', 'uLit', 'uBright', 'uSwing', 'uSide', 'uHinge', 'uCS', 'uOpen', 'uZo', 'uLean', 'uWin', 'uWinH', 'uPy1', 'uWinU', 'uGap', 'uShift', 'uUv']
+    .map(u => [u, gl.getUniformLocation(prog, u)]));
   M3.gl = gl;
   return gl;
 }
@@ -9061,7 +9133,7 @@ function m3Gpu(gl, m){
         textures.set(p.tex, tex);
       }
     }
-    return {vao, count:p.idx.length, tex, base:p.base, cut:p.cut, lit:p.lit};
+    return {vao, count:p.idx.length, tex, base:p.base, cut:p.cut, lit:p.lit, name:p.name};
   });
   return m.gpu;
 }
@@ -9090,28 +9162,42 @@ function m3Draw(v){
   if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
   const g = M3.canvas; if (g.width !== W || g.height !== H) { g.width = W; g.height = H; }
   const s = m3State(v.name), aspect = W / H;
+  // A journal book can be shown open (v.open, 0 closed to 1 lying open): its front board swings over round the
+  // spine, and it's looked at from far enough off, and round the middle of the open book, for it all to fit.
+  const bo = v.open || 0, bd = bo > 0 ? (m.dims === undefined ? (m.dims = bookDims(m.data)) : m.dims) : null;
+  // (the view following the board: moving as it moves, and still once it lies down)
+  const bm = (1 - Math.cos(Math.PI * bo)) / 2;
+  const grow = bd ? 1 + (Math.max(1, Math.hypot(bd.xr - bd.xl, bd.top, bd.zo)) - 1) * bm : 1, cx = bd ? bd.xl * bm : 0;
   // Near enough that the whole model just fits, whichever way the box is longer.
   const half = Math.min(M3_FOV / 2, Math.atan(Math.tan(M3_FOV / 2) * aspect));
-  const dist = 1.06 / Math.sin(half) / s.zoom;
+  const dist = 1.06 * grow / Math.sin(half) / s.zoom;
   const cy = Math.cos(s.yaw), sy = Math.sin(s.yaw), cp = Math.cos(s.pitch), sp = Math.sin(s.pitch);
   const rotY = [cy,0,-sy,0, 0,1,0,0, sy,0,cy,0, 0,0,0,1], rotX = [1,0,0,0, 0,cp,sp,0, 0,-sp,cp,0, 0,0,0,1];
-  const view = m4.mul(m4.trs([s.panX, s.panY, -dist]), m4.mul(rotX, rotY));
+  const view = m4.mul(m4.trs([s.panX, s.panY, -dist]), m4.mul(m4.mul(rotX, rotY), m4.trs([-cx, 0, 0])));
   gl.viewport(0, 0, W, H);
   gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
   gl.enable(gl.DEPTH_TEST); gl.disable(gl.CULL_FACE); gl.disable(gl.BLEND);
   gl.useProgram(M3.prog);
-  const L = M3.loc;
-  gl.uniformMatrix4fv(L.uProj, false, m4.perspective(M3_FOV, aspect, Math.max(0.01, dist - 1.5 - Math.hypot(s.panX, s.panY)), dist + 3));
+  const L = M3.loc; gl.uniform2f(L.uUv, 1, 0);
+  gl.uniform1i(L.uSwing, 0); gl.uniform1f(L.uBright, 0);   // as it is, under the usual light (a book being read changes these)
+  if (bd) {
+    gl.uniform1f(L.uSide, 1); gl.uniform2f(L.uHinge, bd.xl, bd.zi); gl.uniform2f(L.uCS, Math.cos(Math.PI * bo), Math.sin(Math.PI * bo));
+    gl.uniform1f(L.uOpen, bo); gl.uniform1f(L.uZo, bd.zo); gl.uniform1f(L.uLean, 0); gl.uniform2f(L.uWin, 2, 2); gl.uniform1f(L.uWinH, 1); gl.uniform1f(L.uPy1, bd.py1); gl.uniform2f(L.uWinU, 0, 2 * (bd.top - bd.py1));
+    gl.uniform1f(L.uGap, 0); gl.uniform1f(L.uShift, 0);
+  }
+  gl.uniformMatrix4fv(L.uProj, false, m4.perspective(M3_FOV, aspect, Math.max(0.01, dist - 1.5 * grow - Math.hypot(s.panX, s.panY)), dist + 3 * grow));
   gl.uniformMatrix4fv(L.uView, false, view);
   gl.uniform1i(L.uTex, 0);
   for (const p of m3Gpu(gl, m)) {
+    if (p.name === 'spineWindow' && !bd) continue;   // (only for a book shown open; shut, it's a picture lying where nothing shows it)
+    if (bd) gl.uniform1i(L.uSwing, p.name === 'spineWindow' ? 4 : RD3_BOARD.has(p.name) ? 1 : RD3_SPINE.has(p.name) ? 2 : 0);
     gl.uniform4fv(L.uBase, p.base); gl.uniform1f(L.uCut, p.cut); gl.uniform1i(L.uLit, p.lit ? 1 : 0);
     gl.uniform1i(L.uHasTex, p.tex ? 1 : 0);
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, p.tex);
     gl.bindVertexArray(p.vao);
     gl.drawElements(gl.TRIANGLES, p.count, gl.UNSIGNED_INT, 0);
   }
-  gl.bindVertexArray(null);
+  gl.bindVertexArray(null); gl.uniform1i(L.uSwing, 0);
   v.ctx.clearRect(0, 0, W, H);
   v.ctx.drawImage(g, 0, 0);
 }
@@ -9218,6 +9304,8 @@ function shelfModelItem(ref){
     read.textContent = 'Read'; read.title = 'Open the book and read it';
     read.addEventListener('click', () => readBook(name, canvas));
     bar.querySelector('.side-open-btn').before(read);
+    // The page reader got ready beforehand, when nothing else is happening, rather than while the book rises.
+    if (!pdfjsLib) (window.requestIdleCallback || setTimeout)(() => loadPdfjs().catch(() => {}), {timeout:4000});
     item.classList.add('shelf-book'); item.setAttribute('aria-label', 'Book: ' + title);
   }
   wireShelfItem(item, bar);
@@ -9809,8 +9897,10 @@ $('pdfView').addEventListener('close', () => {
    the last, its back cover closes over. A cover doesn't bend: it swings round the spine, its far edge coming
    nearer (so larger) as it stands up. The open book is then "spread" 0 to K; closed at the front it's -1, and
    closed at the back K + 1. */
-const RD = {doc:null, task:null, name:'', model:null, look:null, n:0, spread:0, target:null, aspect:0.7, W:0, H:0, ox:0, oy:0, dpr:1,
-  shift:0, cache:new Map(), queue:[], busy:false, gen:0, pgen:0, turn:null, raf:0, open:false, faceA:null, faceB:null};
+const RD = {doc:null, task:null, name:'', model:null, look:null, n:0, spread:0, target:null, keep:new Set(), next:[], opening:false, hold:false, drawing:false, aspect:0.7, W:0, H:0, ox:0, oy:0, dpr:1,
+  shift:0, cache:new Map(), queue:[], busy:false, gen:0, pgen:0, turn:null, raf:0, open:false, faceA:null, faceB:null,
+  b3:null, g3:null, v3:false, v3At:0, v3Timer:0,
+  skip:0, pdfN:0, ends:false};   // the PDF's pages left out at the start (a book's cover), how many are read, and endpaper leaves (rdSrc)   // the book's model, drawn in 3D while it's closed or a cover swings (rd3Draw)
 const READER_PAPER = '#FBFAF6', READER_BOARD = '#4B1E26', READER_EDGE = '#E4DFD3';
 const rdCanvas = $('readerCanvas'), rdCtx = rdCanvas.getContext('2d');
 let pdfjsLib = null;
@@ -9838,6 +9928,7 @@ function unbindBook(model){
 }
 // from: the canvas the model is showing in, for the book to be taken up from there.
 function readBook(model, from){
+  if (FL.leaving) return;   // (still on its way back to its place)
   const e = entries.get(currentId), pdf = bookPdf(e, model);
   if (pdf) openReader(pdf, pdfTitleIn(e.body, pdf) || 'Book', model, from ? bookLift(model, from) : null);
 }
@@ -9856,6 +9947,8 @@ async function loadBookLook(model){
   const jl = dv.getUint32(12, true), json = JSON.parse(new TextDecoder().decode(new Uint8Array(buf, 20, jl)));
   if (!json.asset || json.asset.generator !== 'Journal book models') return null;   // only the journal's own book models
   const bin = 20 + jl + 8, byName = new Map((json.materials || []).map((m, i) => [m.name, m]));
+  const hb = byName.get('headband'), headband = hb && hb.extras && Array.isArray(hb.extras.colours) &&
+    hb.extras.colours.every(c => typeof c === 'string' && /^#[0-9a-fA-F]{6}$/.test(c)) ? hb.extras.colours.slice(0, 2) : null;
   const mat = async name => {
     const m = byName.get(name); if (!m) return null;
     const pbr = m.pbrMetallicRoughness || {};
@@ -9872,175 +9965,1479 @@ async function loadBookLook(model){
     if ((json.materials[p.material] || {}).name === 'front') aspect = (a.max[0] - a.min[0]) / (a.max[1] - a.min[1]);
   }
   if (!(aspect > 0.1 && aspect < 5)) return null;
-  const [front, back, insideL, insideR, endpaper, board, edges] = await Promise.all(
-    ['front', 'back', 'insideFront', 'insideBack', 'endpaper', 'board', 'edges'].map(mat));
+  const [front, back, insideL, insideR, endpaper, board, edges, paper, endsheet, spine, spineWindow] = await Promise.all(
+    ['front', 'back', 'insideFront', 'insideBack', 'endpaper', 'board', 'edges', 'leaf', 'endsheet', 'spine', 'spineWindow'].map(mat));
+  // The spine's colour, for its hollow showing between the boards of the open book (a photo's, its average).
+  const average = m => {
+    if (!m) return null;
+    if (!m.img) return m.colour;
+    const cv = document.createElement('canvas'); cv.width = cv.height = 8;
+    const c = cv.getContext('2d'); c.drawImage(m.img, 0, 0, 8, 8);
+    const d = c.getImageData(0, 0, 8, 8).data, sum = [0, 0, 0];
+    for (let i = 0; i < d.length; i += 4) for (let j = 0; j < 3; j++) sum[j] += d[i + j];
+    return 'rgb(' + sum.map(v => Math.round(v / 64)).join(',') + ')';
+  };
   return {aspect, thick:Math.max(0.01, z1 - z0), front:front || board, back:back || front || board,
-    insideL:insideL || endpaper || board, insideR:insideR || endpaper || board, board, edges};
+    insideL:insideL || endpaper || board, insideR:insideR || endpaper || board, board, edges, paper, endsheet,
+    spine, spineColour:average(spine) || average(front) || average(board), headband, spineWindow:spineWindow && spineWindow.img || null};
 }
 
 /* Taking a book up to read it. The model itself (drawn by the shared WebGL canvas, over the whole screen) floats
    from where it was, on the right or open large, to just in front of you: it rises a little as it comes, grows
    as it nears, and turns to face you with its front cover. It arrives exactly where the reader shows the closed
-   book, hovers there until the reader is ready, then fades into it, and the cover swings open. Where the model
-   was, it's gone until the book is closed again. With reduced motion asked for, the reader simply opens. */
-const FL = {active:false, raf:0, hid:[], arrived:null, arrive:null, landed:false};
+   book, and stays there, the same model: the reader carries on drawing it (below) until the book lies open.
+   Where the model was, it's gone until the book is closed again. With reduced motion asked for, the reader
+   simply opens. */
+const FL = {active:false, back:null, raf:0, hid:[], lift:null, to:null, arrived:null, arrive:null, landed:false, leaving:false, t:0, ms:0};
 const flEase = t => t * t * t * (t * (t * 6 - 15) + 10);   // smootherstep: starts and ends at rest
+// How far off the camera is from a book in the reader: far enough that it looks as flat as the pages drawn over
+// it. A cover standing up is drawn as if seen from RD3_NEAR, so it's seen coming towards you; only the cover, as
+// from that close, the board underneath would look smaller than the pages lying on it.
+const RD3_FAR = 80, RD3_NEAR = 7;
+// The light a face turned straight at you gets. A book lying still in the reader is lit up by this much more, so
+// its faces look just as their photos and colours do, as the reader draws them.
+const M3_FACE_LIGHT = (() => {
+  const z = (x, y, zz) => Math.max(0, zz / Math.hypot(x, y, zz));
+  return 0.34 * 0.775 + 0.88 * z(-0.45, 0.7, 0.55) + 0.26 * z(0.7, 0.1, 0.35);
+})(), M3_REST_BRIGHT = 1 / M3_FACE_LIGHT - 1;
+/* The shape of one of the journal's own book models (see bookGeometry), from its parts: the front board runs from
+   xl (at the spine) to xr and from -top to top, its outside at zo; the page block runs from xl to px1 and from
+   -py1 to py1, between the insides of the boards at -zi and zi. Null for any other model. As the reader draws
+   the book, a page is the page block's face, and the boards reach past it by sq (a share of the page height). */
+function bookDims(data){
+  const box = name => {
+    let lo = null, hi = null;
+    for (const p of data) if (p.name === name) for (let k = 0; k < p.pos.length; k += 3) {
+      const v = [p.pos[k], p.pos[k + 1], p.pos[k + 2]];
+      lo = lo ? lo.map((x, j) => Math.min(x, v[j])) : v; hi = hi ? hi.map((x, j) => Math.max(x, v[j])) : v;
+    }
+    return lo && {lo, hi};
+  };
+  const f = box('front'), e = box('edges');
+  if (!f || !e) return null;
+  const d = {xl:f.lo[0], xr:f.hi[0], top:f.hi[1], zo:f.hi[2], px1:e.hi[0], py1:e.hi[1], zi:e.hi[2]};
+  if (!(d.px1 > d.xl && d.xr >= d.px1 && d.top > d.py1 && d.py1 > 0 && d.zo > d.zi && d.zi > 0)) return null;
+  // (how far the spine rounds out past the boards, in pages' heights)
+  const sp = box('spine'), round = sp ? Math.max(0, d.xl - sp.lo[0]) / (2 * d.py1) : 0;
+  return Object.assign(d, {aspect:(d.px1 - d.xl) / (2 * d.py1), sq:(d.top - d.py1) / (2 * d.py1), round});
+}
+// The shared canvas made the size of the whole screen and cleared, ready to draw on, and the canvas over the
+// reader that it's copied to.
+function m3Full(){
+  const gl = m3Gl(); if (!gl) return null;
+  const cv = $('readerFlight'), dpr = Math.min(window.devicePixelRatio || 1, 2), SW = innerWidth, SH = innerHeight;
+  const W = Math.max(1, Math.round(SW * dpr)), H = Math.max(1, Math.round(SH * dpr));
+  if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
+  const g = M3.canvas; if (g.width !== W || g.height !== H) { g.width = W; g.height = H; }
+  gl.viewport(0, 0, W, H);
+  gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  gl.enable(gl.DEPTH_TEST); gl.disable(gl.CULL_FACE); gl.disable(gl.BLEND);
+  gl.useProgram(M3.prog); gl.uniform1i(M3.loc.uTex, 0); gl.uniform2f(M3.loc.uUv, 1, 0);
+  return {gl, L:M3.loc, cv, g, dpr, SW, SH, W, H};
+}
+function m3Part(gl, L, p){
+  gl.uniform4fv(L.uBase, p.base); gl.uniform1f(L.uCut, p.cut); gl.uniform1i(L.uLit, p.lit ? 1 : 0);
+  gl.uniform1i(L.uHasTex, p.tex ? 1 : 0);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, p.tex);
+  gl.bindVertexArray(p.vao);
+  gl.drawElements(gl.TRIANGLES, p.count, gl.UNSIGNED_INT, 0);
+}
+// A projection for the whole screen with the camera's axis through (x, y) on it, showing what's dist away as
+// s pixels to a unit.
+function m3Aim(x, y, s, dist, SW, SH, near, far){
+  const h = 2 * dist * Math.tan(M3_FOV / 2) * s;
+  return m4.mul([h / SW,0,0,0, 0,h / SH,0,0, 0,0,1,0, 2 * x / SW - 1,1 - 2 * y / SH,0,1], m4.perspective(M3_FOV, 1, near, far));
+}
 function bookLift(name, from){
   const m = M3.cache.get(name);
   if (!m || !m.data || !from.isConnected || !m3Gl()) return null;
   if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return null;
   const r = from.getBoundingClientRect();
   if (r.width < 4 || r.height < 4 || r.bottom < 0 || r.top > innerHeight || r.right < 0 || r.left > innerWidth) return null;
-  // The model's extent: a journal book model is its front cover facing +z, 2hy tall and 2hx wide.
+  // The model's extent, for a book that isn't one of the journal's own: its front cover facing +z, 2hy tall and 2hx wide.
   let hx = 0, hy = 0, hz = 0;
   for (const p of m.data) for (let k = 0; k < p.pos.length; k += 3) {
     hx = Math.max(hx, Math.abs(p.pos[k])); hy = Math.max(hy, Math.abs(p.pos[k + 1])); hz = Math.max(hz, Math.abs(p.pos[k + 2]));
   }
   if (!(hy > 0.01)) return null;
   const s = m3State(name), aspect = r.width / r.height;
-  const half = Math.min(M3_FOV / 2, Math.atan(Math.tan(M3_FOV / 2) * aspect));
-  return {name, from, hx, hy, hz, aspect, rect:{left:r.left, top:r.top, width:r.width, height:r.height},
-    x:r.left + r.width / 2, y:r.top + r.height / 2, h:r.height, dist:1.06 / Math.sin(half) / s.zoom,
+  const half = Math.min(M3_FOV / 2, Math.atan(Math.tan(M3_FOV / 2) * aspect)), dist = 1.06 / Math.sin(half) / s.zoom;
+  return {name, from, hx, hy, hz, rect:{left:r.left, top:r.top, width:r.width, height:r.height},
+    x:r.left + r.width / 2, y:r.top + r.height / 2, s:r.height / (2 * dist * Math.tan(M3_FOV / 2)), dist,
     yaw:Math.atan2(Math.sin(s.yaw), Math.cos(s.yaw)), pitch:s.pitch, panX:s.panX, panY:s.panY};
 }
 function flyBook(lift){
   const st = $('readerStage').getBoundingClientRect(), sw = st.width, sh = st.height;
   if (!sw || !sh) { $('bookReader').classList.remove('flying'); return; }
-  // Where the reader will show the closed book: its boards (page height plus a margin each side), in the middle.
-  const H = readerFit(sw, sh, Math.min(2, Math.max(0.25, lift.hx / lift.hy)));
-  const px = H + 2 * Math.max(8, H * 0.024), dist = Math.max(lift.dist, 2.2);
-  const to = {x:st.left + sw / 2, y:st.top + sh / 2, dist, h:px * Math.tan(M3_FOV / 2) * (dist - lift.hz) / lift.hy};
+  let to;
+  if (RD.b3 && RD.W) to = rd3Pose(false);
+  else {
+    // Another model: its front cover as large as the reader's closed book, in the middle.
+    const H = readerFit(sw, sh, Math.min(2, Math.max(0.25, lift.hx / lift.hy))), px = H + 2 * Math.max(8, H * 0.024);
+    to = {x:st.left + sw / 2, y:st.top + sh / 2, s:px / (2 * lift.hy), dist:Math.max(lift.dist, 2.2), panX:0, panZ:-lift.hz, bright:0};
+  }
   const far = Math.hypot(to.x - lift.x, to.y - lift.y), ms = Math.max(750, Math.min(1100, 650 + far * 0.35));
   // Every view of it goes (on the right as well as the large view it may have come from): the book is in your hands.
   const hid = [lift.from, ...[...M3.views].filter(v => v.name === lift.name && v.canvas !== lift.from).map(v => v.canvas)];
-  Object.assign(FL, {active:true, hid, landed:false, arrived:new Promise(r => FL.arrive = r)});
+  Object.assign(FL, {active:true, hid, lift, to, landed:false, t:0, ms, arrived:new Promise(r => FL.arrive = r)});
   for (const c of hid) c.style.visibility = 'hidden';
-  const cv = $('readerFlight'); cv.hidden = false; cv.classList.remove('landing');
-  const t0 = performance.now();
+  const cv = $('readerFlight'); cv.hidden = false; cv.classList.remove('landing', 'entering');
+  // Its first frame now, where it lies, while the reader is still being set up (the canvases made the size of the
+  // screen, and so on); it moves from the next. And a frame that's late only holds it back a little: it doesn't
+  // leap ahead, so however long the first frames take, it rises smoothly.
+  flyFrame(lift, to, 0, 0);
+  let clock = 0, prev = 0;
   const step = now => {
     FL.raf = 0;
     if (!FL.active) return;
-    const t = Math.min(1, (now - t0) / ms);
-    flyFrame(lift, to, t, t < 1 ? 0 : now - t0 - ms);
+    clock += prev ? Math.min(now - prev, 34) : 0; prev = now;
+    const t = Math.min(1, clock / ms);
+    FL.t = t; FL.ms = ms;
+    flyFrame(lift, to, t, t < 1 ? 0 : clock - ms);
     if (t >= 1 && FL.arrive) { FL.arrive(); FL.arrive = null; }
     if (!FL.landed) FL.raf = requestAnimationFrame(step);
   };
   FL.raf = requestAnimationFrame(step);
 }
+// Just as the reader draws a journal book lying closed (rd3Draw), at the front or (back) turned over at the back:
+// its spine where the reader has it, the pages the reader's size, seen from far off, and lit as brightly.
+function rd3Pose(back){
+  const d = RD.b3, st = $('readerStage').getBoundingClientRect(), shift = (back ? 1 : -1) * (RD.W + rdMargin()) / 2;
+  return {x:st.left + RD.ox + shift + RD.W, y:st.top + RD.oy + RD.H / 2, s:RD.H / (2 * d.py1), dist:RD3_FAR,
+    yaw:back ? Math.PI : 0, panX:back ? d.xl : -d.xl, panZ:-d.zi, bright:M3_REST_BRIGHT, still:true};
+}
 // One frame of the flight, t going 0 to 1; after that, wait is how long it has hovered.
 function flyFrame(a, b, t, wait){
-  const gl = m3Gl(), m = M3.cache.get(a.name), cv = $('readerFlight');
-  if (!gl || !m || !m.data) return;
-  const dpr = Math.min(window.devicePixelRatio || 1, 2), SW = innerWidth, SH = innerHeight;
-  const W = Math.max(1, Math.round(SW * dpr)), H = Math.max(1, Math.round(SH * dpr));
-  if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
-  const g = M3.canvas; if (g.width !== W || g.height !== H) { g.width = W; g.height = H; }
+  const m = M3.cache.get(a.name); if (!m || !m.data) return;
+  const f = m3Full(); if (!f) return;
+  const {gl, L, SW, SH, dpr} = f;
   const lerp = (x, y, k) => x + (y - x) * k;
-  // It moves and grows together; it turns a little behind, so it's seen coming round as it rises.
+  // It moves and grows together; it turns a little behind, so it's seen coming round as it rises. As it comes,
+  // it's seen from further and further off, and so flattens out, to lie as flat as the reader's pages.
   const e = flEase(t), er = flEase(Math.min(1, Math.max(0, (t - 0.08) / 0.84)));
   const lift = Math.min(70, 0.14 * Math.hypot(b.x - a.x, b.y - a.y)) * Math.sin(Math.PI * e);
-  const bob = wait > 0 ? Math.sin(wait / 520) * 2 * Math.min(1, wait / 400) : 0;   // hovering while the pages get ready
-  const x = lerp(a.x, b.x, e), y = lerp(a.y, b.y, e) - lift + bob, h = Math.exp(lerp(Math.log(a.h), Math.log(b.h), e));
-  const dist = lerp(a.dist, b.dist, e), yaw = lerp(a.yaw, 0, er), pitch = lerp(a.pitch, 0, er);
-  const panX = lerp(a.panX, 0, e), panY = lerp(a.panY, 0, e);
-  // Drawn as it would be in a box h tall (the shape of the one it came from) centred at x, y: the box's own
-  // projection, then moved and scaled to that place on the whole screen.
-  const place = [h * a.aspect / SW,0,0,0, 0,h / SH,0,0, 0,0,1,0, 2 * x / SW - 1,1 - 2 * y / SH,0,1];
-  const proj = m4.mul(place, m4.perspective(M3_FOV, a.aspect, Math.max(0.01, dist - 1.5 - Math.hypot(panX, panY)), dist + 3));
+  const bob = wait > 0 && !b.still ? Math.sin(wait / 520) * 2 * Math.min(1, wait / 400) : 0;   // hovering while the pages get ready
+  const x = lerp(a.x, b.x, e), y = lerp(a.y, b.y, e) - lift + bob, s = Math.exp(lerp(Math.log(a.s), Math.log(b.s), e));
+  // (turned the shorter way round to the yaw it arrives at)
+  const by = a.yaw + Math.atan2(Math.sin((b.yaw || 0) - a.yaw), Math.cos((b.yaw || 0) - a.yaw));
+  const dist = 1 / lerp(1 / a.dist, 1 / b.dist, e), yaw = lerp(a.yaw, by, er), pitch = lerp(a.pitch, 0, er);
+  const panX = lerp(a.panX, b.panX, e), panY = lerp(a.panY, 0, e), panZ = lerp(0, b.panZ, e);
   const cy = Math.cos(yaw), sy = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch);
   const rotY = [cy,0,-sy,0, 0,1,0,0, sy,0,cy,0, 0,0,0,1], rotX = [1,0,0,0, 0,cp,sp,0, 0,-sp,cp,0, 0,0,0,1];
-  const view = m4.mul(m4.trs([panX, panY, -dist]), m4.mul(rotX, rotY));
-  gl.viewport(0, 0, W, H);
-  gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-  gl.enable(gl.DEPTH_TEST); gl.disable(gl.CULL_FACE); gl.disable(gl.BLEND);
-  gl.useProgram(M3.prog);
-  const L = M3.loc;
-  gl.uniformMatrix4fv(L.uProj, false, proj); gl.uniformMatrix4fv(L.uView, false, view); gl.uniform1i(L.uTex, 0);
-  for (const p of m3Gpu(gl, m)) {
-    gl.uniform4fv(L.uBase, p.base); gl.uniform1f(L.uCut, p.cut); gl.uniform1i(L.uLit, p.lit ? 1 : 0);
-    gl.uniform1i(L.uHasTex, p.tex ? 1 : 0);
-    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, p.tex);
-    gl.bindVertexArray(p.vao);
-    gl.drawElements(gl.TRIANGLES, p.count, gl.UNSIGNED_INT, 0);
-  }
+  const reach = 1.5 + Math.hypot(panX, panY, panZ);
+  gl.uniformMatrix4fv(L.uProj, false, m3Aim(x, y, s, dist, SW, SH, Math.max(0.01, dist - reach), dist + reach + 1.5));
+  gl.uniformMatrix4fv(L.uView, false, m4.mul(m4.trs([panX, panY, panZ - dist]), m4.mul(rotX, rotY)));
+  gl.uniform1i(L.uSwing, 0); gl.uniform1f(L.uBright, lerp(0, b.bright, e));
+  for (const p of m3Gpu(gl, m)) if (p.name !== 'spineWindow') m3Part(gl, L, p);   // (that's only for the flat reader's open book)
   gl.bindVertexArray(null);
   // At first it's still inside the box it was in (cut off where that was, if it was zoomed in); the box
   // opens out as it leaves.
-  const c = cv.getContext('2d'), k = flEase(Math.min(1, t / 0.4)), r = a.rect;
+  const c = f.cv.getContext('2d'), k = flEase(Math.min(1, t / 0.4)), r = a.rect;
   const l = lerp(r.left, 0, k), tp = lerp(r.top, 0, k), rw = lerp(r.left + r.width, SW, k), bt = lerp(r.top + r.height, SH, k);
-  c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, W, H);
+  c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, f.W, f.H);
   c.save(); c.beginPath(); c.rect(l * dpr, tp * dpr, (rw - l) * dpr, (bt - tp) * dpr); c.clip();
-  c.drawImage(g, 0, 0); c.restore();
+  c.drawImage(f.g, 0, 0); c.restore();
 }
-// Once it has arrived and the reader has drawn the book under it, the model fades into the reader's book.
+// Once it has arrived and the reader is ready: a journal book stays as it is, and the reader carries on drawing
+// it just the same; any other model fades into the reader's book.
 async function flyLand(gen){
   if (!FL.active) return;
   await FL.arrived;
   if (gen !== RD.gen || !FL.active || FL.landed) return;
   FL.landed = true;
   if (FL.raf) { cancelAnimationFrame(FL.raf); FL.raf = 0; }
-  $('bookReader').classList.remove('flying'); $('readerFlight').classList.add('landing');
+  $('bookReader').classList.remove('flying');
+  if (FL.to && FL.to.still && RD.b3) {
+    FL.active = false; RD.v3 = true;
+    drawReader();
+    return;
+  }
+  $('readerFlight').classList.add('landing');
   await new Promise(r => setTimeout(r, 320));
   if (gen === RD.gen) flyEnd();
 }
 function flyEnd(){
   FL.active = false;
+  if (FL.back) FL.back();
   if (FL.raf) { cancelAnimationFrame(FL.raf); FL.raf = 0; }
   if (FL.arrive) { FL.arrive(); FL.arrive = null; }
-  const cv = $('readerFlight'); cv.hidden = true; cv.classList.remove('landing');
+  const cv = $('readerFlight'); cv.hidden = true; cv.classList.remove('landing', 'entering');
   $('bookReader').classList.remove('flying');
+}
+/* Closing the book: the flight the other way. The book is shut first (its cover swings closed, if it's open), then
+   it floats back to where it was taken from (or, if that's gone, to the model on the right), turning back to how it
+   lay there, while the room lightens; there the model is itself again. Without anywhere to go back to (or with
+   reduced motion asked for), the reader simply closes. */
+// Flies it back from t (of the way up) to where it was, over as long as it took to come that far.
+function flyBackFrom(lift, to, t, ms, gen){
+  const t0 = performance.now(), dur = Math.max(250, ms * t);
+  return new Promise(end => {
+    // (and if the flight's stopped from outside, the reader closed some other way, it's over then too)
+    const done = () => { if (FL.back === done) FL.back = null; end(); };
+    FL.back = done;
+    const step = now => {
+      if (gen !== RD.gen) { done(); return; }
+      const u = Math.min(1, (now - t0) / dur);
+      flyFrame(lift, to, t * (1 - u), 0);
+      if (u < 1) FL.raf = requestAnimationFrame(step); else done();
+    };
+    FL.raf = requestAnimationFrame(step);
+  });
+}
+async function closeBook(){
+  const dlg = $('bookReader');
+  if (FL.leaving) return;
+  // (held turned, moved or nearer: it's put back as it was first, then it goes back)
+  if (RD.doc && !rvHome() && !FL.active) { if (RV.going) return; RV.going = true; try { await rvGoHome(); } finally { RV.going = false; } }
+  // The model comes back in the same moment as the reader (and the book flying in it) goes, and the reader lets
+  // go of the book then: its 'close' event comes a little after, and a frame could be shown between, with the
+  // book nowhere (or a page just drawn could show it again).
+  const shut = () => { closeReaderDoc(); if (dlg.open) dlg.close(); };
+  // Closed while it's still on its way up: it goes back from where it's got to.
+  if (FL.active && !FL.landed && FL.lift && FL.to) {
+    const gen = RD.gen, lift = FL.lift, to = FL.to, t = FL.t;
+    FL.leaving = true; FL.landed = true;   // the flight up stops here (and won't land)
+    if (RD.drawTask) RD.drawTask.cancel();
+    if (FL.raf) { cancelAnimationFrame(FL.raf); FL.raf = 0; }
+    // The room lightens again from however dark it had got, and the bar goes, as the book goes back.
+    const ms = Math.max(250, (FL.ms || 900) * t);
+    try {
+      for (const an of dlg.getAnimations({subtree:true})) {
+        const ct = Math.max(0, Number(an.currentTime) || 0);
+        an.reverse(); an.updatePlaybackRate(-Math.max(0.25, ct / ms));
+      }
+    } catch (e) {}
+    try { await flyBackFrom(lift, to, t, FL.ms || 900, gen); }
+    finally { shut(); FL.leaving = false; dlg.classList.remove('leaving'); }
+    return;
+  }
+  const lift0 = FL.lift, name = lift0 && lift0.name;
+  const target = name && [lift0.from, ...FL.hid].find(c => c && c.isConnected && c.getBoundingClientRect().width > 3);
+  if (!target || FL.active || !RD.doc) { shut(); return; }
+  FL.leaving = true; RD.next = [];
+  if (RD.drawTask) RD.drawTask.cancel();   // (a page being drawn is let go of: it's drawn again if it's needed)
+  const gen = RD.gen, K = lastSpread();
+  try {
+    // Shut: a cover on its way open goes back the way it came; one on its way shut carries on; and from an open
+    // spread (or a page being turned), the cover nearer it swings closed over it: the front one in the first half
+    // of the book, the back one past the middle.
+    if (RD.b3 && RD.look) {
+      const t = RD.turn;
+      if (t && t.kind === 'rigid') { if (t.to >= 0 && t.to <= K) rdAnimate(t, 'back'); }
+      else {
+        if (t && t.mode === 'anim') rdSettle();   // (a page on its way over lies down where it was going first)
+        RD.turn = null;
+        if (RD.spread >= 0 && RD.spread <= K) rdRigid(RD.spread, 2 * RD.spread > K ? K + 1 : -1, 'turn');
+      }
+      while (gen === RD.gen && RD.turn) await new Promise(r => setTimeout(r, 30));
+    }
+    if (gen !== RD.gen) return;
+    const lift = bookLift(name, target), back = RD.spread > K;
+    if (!lift) return;
+    const to = RD.b3 && RD.look ? rd3Pose(back) : FL.to;
+    if (!to) return;
+    FL.active = true; FL.landed = false;   // the reader stops drawing the book; the flight has it now
+    const cv = $('readerFlight');
+    const fresh = cv.hidden;
+    cv.hidden = false; cv.classList.remove('landing', 'entering');
+    flyFrame(lift, to, 1, 0);
+    if (fresh) { void cv.offsetWidth; cv.classList.add('entering'); }   // a book shown open, not as the model: the model comes in over it
+    dlg.classList.add('leaving');
+    await new Promise(r => setTimeout(r, fresh ? 200 : 0));
+    const far = Math.hypot(to.x - lift.x, to.y - lift.y);
+    await flyBackFrom(lift, to, 1, Math.max(750, Math.min(1100, 650 + far * 0.35)), gen);
+  } finally {
+    // closed first: let go of the lightening before, and the room would be dark again for a moment
+    shut();
+    FL.leaving = false; dlg.classList.remove('leaving');
+  }
 }
 // Closing the book puts the model back where it was.
 function flyStop(){
   flyEnd();
   for (const c of FL.hid) c.style.visibility = '';
-  FL.hid = [];
+  FL.hid = []; FL.lift = FL.to = null;
+}
+
+/* The book in the reader while it's closed, or while a cover swings: the journal's book model itself, drawn on
+   the canvas over the reader (the one it flew up on), so the book you took up is the book you open. It lies
+   facing you, seen from far off so it looks as flat as the pages. A cover swings round its hinge towards you,
+   looking larger as it stands up and comes nearer, and the pages the book opens at lie on the page block and on the
+   inside of the board. Closing at the back, the book is turned over and its back board swings the same way.
+   Once it lies open, the reader's own drawing of the open book (drawn to the model's proportions, and lit the
+   same) takes over, and the model fades away over it. */
+const RD3_BOARD = new Set(['front', 'back', 'insideFront', 'insideBack', 'endpaper', 'rim', 'board']);
+const RD3_SPINE = new Set(['spine', 'headcap', 'tailcap', 'capSide']);
+// A flat, textured rectangle in the model from x0 to x1 (the page's height), at z, facing n (1 or -1).
+function rd3Quad(gl, d, x0, x1, z, n, flipU){
+  const pts = [[x0, d.py1, z], [x1, d.py1, z], [x1, -d.py1, z], [x0, -d.py1, z]], made = [];
+  const pos = new Float32Array(pts.flat()), nrm = new Float32Array([0, 0, n, 0, 0, n, 0, 0, n, 0, 0, n]);
+  const uv = new Float32Array(flipU ? [1, 0, 0, 0, 0, 1, 1, 1] : [0, 0, 1, 0, 1, 1, 0, 1]);
+  const vao = gl.createVertexArray(); gl.bindVertexArray(vao); made.push(['VertexArray', vao]);
+  for (const [loc, data, size] of [[0, pos, 3], [1, nrm, 3], [3, uv, 2]]) {
+    const b = gl.createBuffer(); made.push(['Buffer', b]); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, size, gl.FLOAT, false, 0, 0);
+  }
+  gl.disableVertexAttribArray(2); gl.vertexAttrib4f(2, 1, 1, 1, 1);
+  // Wound so its front is the side it faces (the light falls on the front).
+  const ib = gl.createBuffer(); made.push(['Buffer', ib]); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib);
+  gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint32Array(n > 0 ? [0, 2, 1, 0, 3, 2] : [0, 1, 2, 0, 2, 3]), gl.STATIC_DRAW);
+  gl.bindVertexArray(null);
+  return {vao, count:6, base:[1, 1, 1, 1], cut:0, lit:true, tex:null, made};
+}
+/* What the book can show once a board swings: on the page block, and on the inside of the swinging board, a page
+   (over the block's face) and the edges of the pages beside it (the width m of them, in the board's margin). Where
+   each lies in the model, before the board swings, a hair clear of what it lies on, and read the right way round
+   once the board has swung over (or, for the back, as the turned-over book shows it). */
+const RD3_E1 = 0.0008, RD3_E2 = 0.0016;
+const rd3Place = (d, back, slot) => {
+  const board = slot === 'board', z = (back ? -1 : 1) * (d.zi - (board ? RD3_E1 : RD3_E2));
+  return {z, n:(back ? -1 : 1) * (board ? -1 : 1), flipU:board !== back};
+};
+function rd3Quads(gl, d){
+  const page = (back, slot) => { const q = rd3Place(d, back, slot); return rd3Quad(gl, d, d.xl, d.px1, q.z, q.n, q.flipU); };
+  return {front:{board:page(false, 'board'), block:page(false, 'block')}, back:{board:page(true, 'board'), block:page(true, 'block')}};
+}
+// The edges beside a page, m wide in the model: made again only when their width changes.
+function rd3Strip(gl, back, slot, m){
+  const g3 = RD.g3, key = [back, slot, m.toFixed(6)].join(), name = slot + 'Edge', old = g3.strips[name];
+  if (old && old.key === key) return old;
+  if (old) for (const [kind, obj] of old.made) gl['delete' + kind](obj);
+  const q = rd3Place(g3.d, back, slot);
+  return g3.strips[name] = Object.assign(rd3Quad(gl, g3.d, g3.d.px1, g3.d.px1 + m, q.z, q.n, q.flipU), {key});
+}
+// Something the reader draws (w wide, the page's height), as a texture, redrawn only when key or entry changes
+// (a sharper drawing of the page arrives, or the reader changes size).
+function rd3Tex(gl, slot, key, entry, w, draw){
+  const rec = RD.g3.tex[slot] || (RD.g3.tex[slot] = {});
+  key = [key, RD.H, RD.dpr].join();
+  if (rec.tex && rec.key === key && rec.entry === entry) return rec.tex;
+  const cv = rec.cv || (rec.cv = document.createElement('canvas'));
+  cv.width = Math.max(1, Math.round(w * RD.dpr)); cv.height = Math.max(1, Math.round(RD.H * RD.dpr));
+  const c = cv.getContext('2d'); c.setTransform(RD.dpr, 0, 0, RD.dpr, 0, 0); c.clearRect(0, 0, w, RD.H); draw(c);
+  if (!rec.tex) rec.tex = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, rec.tex);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false); gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, cv);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  rec.key = key; rec.entry = entry;
+  return rec.tex;
+}
+// Page p as the reader draws it lying on the left (x 0) or the right (x RD.W) of the book open at spread k, with
+// the page edges beside it where they lie over its place (e).
+const rd3PageTex = (gl, slot, p, x, k, e) => rd3Tex(gl, slot, [p, x, RD.W, k, e.t].join(), RD.cache.get(p) || null, RD.W, c => {
+  c.translate(-x, 0);
+  // Under it, the inside of the board, just as the reader draws it: it shows where the page's corners dip into the
+  // spine (left empty, those would show black on the model).
+  const left = x === 0, b = rdMargin();
+  rdFill(c, RD.look && (left ? RD.look.insideL : RD.look.insideR), left ? -b : RD.W, -b, RD.W + b, RD.H + 2 * b, READER_BOARD);
+  if (e.inn) rdEdges(c, left ? e.inn : 2 * RD.W - e.inn, e.t, left);
+  rdSlotAt(c, p, x, k);
+});
+// The page edges in the board's margin (e.out wide), as the reader draws them on the left or the right.
+const rd3EdgeTex = (gl, slot, e, left) => rd3Tex(gl, slot, [e.t, e.out, left].join(), null, e.out, c => {
+  if (left) { c.translate(e.out, 0); rdEdges(c, e.inn, e.t, true); } else { c.translate(-2 * RD.W, 0); rdEdges(c, 2 * RD.W - e.inn, e.t, false); }
+});
+/* How far out from the back of the pages a board's edge lies once it's swung open, in the model's units: it hinges
+   at its joint, outside the spine's shoulder, not at the pages, so it swings clear of them and lies down a little
+   way out from them, the endpaper running over the joint between (the open book in 3D only; the flat one is drawn
+   with the board at the spine). */
+const rd3Gap = d => obActive() ? Math.max(1.5 * (d.zo - d.zi), 0.022 * d.py1) : 0;
+// How far out a board lies at spread k of the open book (obBuild), in the model's units: the whole gap where the
+// spine stands up and the board lies open over it, less the further the spine turns under the book, half of it in
+// the middle. (back: the back board)
+// The share of the picture inside a board that the board takes at spread k of the open book, the joint having the rest
+// (as obBuild's hingeA has it).
+function rd3HingeA(d, k, back){
+  const G = rd3GapAt(d, k, back); if (!G) return 1;
+  return (d.xr - d.xl) / (d.xr - d.xl + G);
+}
+function rd3GapAt(d, k, back){
+  const G = rd3Gap(d); if (!G) return 0;
+  const py = 2 * d.py1, Tn = Math.max(0.01, d.zi / d.py1), bt = Math.max(0.004, (d.zo - d.zi) / py);
+  const f = Math.min(1, Math.max(0, 2 * k / Math.max(1, RD.n))), sn = Math.sin(Math.PI * f), s = Tn * 0.5 + bt;
+  const Lc = 2 * s - (bt + 0.002) * (1 - sn), lam = (bt - 0.002) * (1 - sn);
+  const sth = (f < 0.5 ? 1 : -1) * Math.min(1, (Tn * Math.abs(1 - 2 * f) + lam) / Lc);
+  return G / 2 * (back ? 1 - sth : 1 + sth);
+}
+/* The joint as the board swings round it (th, its angle; side, 1 the front board, -1 the back): the covering
+   running from the spine's edge (as far down as the spine has sunk, open) round the board's edge, and on the
+   inside the endpaper, from the board over the joint to the back of the pages. Nothing while the book is shut.
+   Worked out as the shader moves the board (with its lean), and drawn as it is. */
+function rd3Joint(gl, L, m, d, side, th, open, lean, G){
+  const gpu = m3Gpu(gl, m), part = (...names) => { for (const n of names) { const p = gpu.find(q => q.name === n); if (p) return p; } return null; };
+  const hx = d.xl - G / 2, hz = side * d.zi, c = Math.cos(th), sn = Math.sin(th), T = d.top, bt = d.zo - d.zi, tile = rimTile(m.data);
+  const at = (px, pz) => {
+    const dx = px - hx, dz = pz - hz, z = hz + side * dx * sn + dz * c, k = 1 + lean * Math.max(side * (z - hz), 0);
+    return [hx + (dx * c - side * dz * sn) * k, z, k];
+  };
+  // The joint, from the board's edge (its inside corner bi, outside bo) to the spine and the back of the pages (the
+  // top of the pages there, pg): shut, it's nothing; open, it's the board carried on in to the spine (obJointFill).
+  const bi = at(d.xl, side * d.zi), bo = at(d.xl, side * d.zo), pg = [d.xl, side * d.zi, 1];
+  const strip = (mesh, a, b, u) => {
+    const n = [b[1] - a[1], 0, a[0] - b[0]];
+    if (Math.hypot(n[0], n[2]) < 1e-7) return;
+    obQuad(mesh, [[a[0], T * a[2], a[1]], [b[0], T * b[2], b[1]], [b[0], -T * b[2], b[1]], [a[0], -T * a[2], a[1]]], n, [[u, 0], [u, 0], [u, 1], [u, 1]]);
+  };
+  const made = [], draw = (mesh, p, fallback) => {
+    if (!mesh.idx.length) return;
+    const g = obMesh(gl, made, mesh), how = p || {base:fallback, cut:0, lit:true, tex:null};
+    m3Part(gl, L, {vao:g.vao, count:g.count, base:how.base || [1, 1, 1, 1], cut:how.cut || 0, lit:how.lit !== false, tex:how.tex || null});
+  };
+  const us = side > 0 ? 0.998 : 0.002, cover = obNew(), paste = obNew(), ends = obNew();
+  // (the endpaper over the joint: the board's own picture of it from beside the spine, true to size, the same way round)
+  { const hA = rd3HingeA(d, RD.spread >= 0 && RD.spread <= lastSpread() ? RD.spread : side > 0 ? 0 : lastSpread(), side < 0), ub = side > 0 ? hA : 1 - hA, ug = side > 0 ? 1 : 0;
+    const n = [pg[1] - bi[1], 0, bi[0] - pg[0]];
+    if (Math.hypot(n[0], n[2]) > 1e-7) obQuad(paste, [[bi[0], T * bi[2], bi[1]], [pg[0], T, pg[1]], [pg[0], -T, pg[1]], [bi[0], -T * bi[2], bi[1]]], n, [[ub, 0], [ug, 0], [ug, 1], [ub, 1]]); }
+  // (the spine's end as the shader has it: sunk towards the back as the book opens; from its edge by this board, outwards)
+  const zs = z => { const q = Math.max(-d.zo, Math.min(d.zo, z)); return q + (-side * d.zo - q) * open; };
+  const arcM = spineArc(m.data), uz = z => (Math.max(-d.zo, Math.min(d.zo, z)) + d.zo) / (2 * d.zo);
+  const arc = arcM.map(([x, z]) => [x, zs(z), 1, uz(z)]);
+  if (side > 0) arc.reverse();
+  const C = [d.xl, zs(side * d.zo), 1, side > 0 ? 1 : 0];
+  // (the covering round the joint from the board's photo: the front's runs 0 at the spine, the back's 1)
+  const tx = {uS:side > 0 ? 0.006 : 0.994, dir:side > 0 ? 1 : -1, W:d.xr - d.xl};
+  if (arc.length) arc[0] = C;
+  // (the photo of the board's edges carried on round: along the board from its edge, and across it from its
+  // outside to its inside, as the board lies now)
+  const along = [c, side * sn], out = [-sn, side * c];
+  const cap = p => [((p[0] - bi[0]) * along[0] + (p[1] - bi[1]) * along[1]) / tile,
+    Math.min(1, Math.max(0, 1 - ((p[0] - bi[0]) * out[0] + (p[1] - bi[1]) * out[1]) / Math.max(1e-6, bt)))];
+  const half = arc.slice(0, Math.ceil(arc.length / 2));
+  const jf = obJointFill(cover, ends, bo, bi, C, pg, half, T, tx, cap, [-along[0], -along[1]]);
+  obFillet(cover, ends, jf.corner, jf.dir, jf.from, obFilletR(d) * (1 - c) / 2, T, tx, cap, bi, arc);
+  const ins = side > 0 ? part('insideFront', 'endpaper') : part('insideBack', 'endpaper');
+  draw(cover, side > 0 ? part('front', 'board') : part('back', 'front', 'board'), [0.3, 0.08, 0.08, 1]); draw(paste, ins, [0.8, 0.77, 0.7, 1]); draw(ends, part('rim', 'board'), [0.3, 0.08, 0.08, 1]);
+  gl.bindVertexArray(null);
+  for (const [kind, obj] of made) gl['delete' + kind](obj);
+}
+/* A headband's ends curving down into the spine (so that they aren't seen ending): over the last Rb of its length at
+   each end its roll turns, a quarter round, towards -x (into the hollow of the spine), keeping its length. pos (and
+   nrm, if given) are changed in place: [x, y, z] with its length along z, its middle at x = cx, its ends at +-zEnd. */
+function bendHeadband(pos, nrm, cx, zEnd, Rb){
+  Rb = Math.min(Rb, zEnd); const zs = zEnd - Rb;
+  for (let i = 0; i < pos.length; i += 3) {
+    const sz = Math.sign(pos[i + 2]) || 1, az = Math.abs(pos[i + 2]);
+    if (az <= zs) continue;
+    const phi = Math.min(1, (az - zs) / Rb) * Math.PI / 2, c = Math.cos(phi), s = Math.sin(phi), dx = pos[i] - cx;
+    pos[i] = cx - Rb * (1 - c) + dx * c; pos[i + 2] = sz * (zs + Rb * s + dx * s);
+    if (nrm) { const nx = nrm[i], nz = sz * nrm[i + 2]; nrm[i] = nx * c - nz * s; nrm[i + 2] = sz * (nx * s + nz * c); }
+  }
+}
+/* A headband: a roll of silk, radius r, round the line x = cx, y = cy, from z -zEnd to zEnd, in rings along it (closer
+   together towards its ends, which curve down into the spine: bendHeadband), its silk repeating reps times along it. */
+function headbandTube(cx, cy, r, zEnd, reps, out, room){
+  // (room: how deep the hollow of the spine is behind it, at the spine's middle, and how wide the spine is across,
+  // [depth, half-width]: its ends are brought in, and curve no further, than they can and stay inside the spine)
+  let Rb = 2.5 * r;
+  if (room) {
+    const [dep, zo] = room, depthAt = z => dep * Math.sqrt(Math.max(0, 1 - (z / zo) * (z / zo)));
+    // (it runs the whole way across the leaves; its ends curve in as tightly as they need to, to stay inside the
+    // spine there, and only if the spine is too shallow even for that is it brought in a little)
+    Rb = Math.min(Rb, depthAt(zEnd + r) - 1.4 * r);
+    while (Rb < 0.8 * r && zEnd > 0.6 * zo) { zEnd *= 0.99; Rb = Math.min(2.5 * r, depthAt(zEnd + r) - 1.4 * r); }
+    Rb = Math.max(0.3 * r, Rb);
+  }
+  const M = 16, rings = [], NZ = 40;
+  for (let i = 0; i <= NZ; i++) { const t = -1 + 2 * i / NZ; rings.push(zEnd * Math.sign(t) * (1 - Math.pow(1 - Math.abs(t), 1.6))); }
+  const o = out || {pos:[], nrm:[], uv:[], idx:[]}, b0 = o.pos.length / 3;
+  for (const z of rings) for (let i = 0; i <= M; i++) {
+    const a = 2 * Math.PI * i / M, nx = Math.cos(a), ny = Math.sin(a);
+    o.pos.push(cx + r * nx, cy + r * ny, z); o.nrm.push(nx, ny, 0); o.uv.push((z + zEnd) / (2 * zEnd) * reps, i / M);
+  }
+  for (let k = 0; k < rings.length - 1; k++) for (let i = 0; i < M; i++) {
+    const a = b0 + k * (M + 1) + i, c = a + M + 1; o.idx.push(a, a + 1, c, a + 1, c + 1, c);
+  }
+  // (its ends closed, curving down into the spine with the rest)
+  for (const [k, sz] of [[0, -1], [rings.length - 1, 1]]) {
+    const e0 = o.pos.length / 3;
+    o.pos.push(cx, cy, rings[k]); o.nrm.push(0, 0, sz); o.uv.push(0, 0.5);
+    for (let i = 0; i <= M; i++) { const a = 2 * Math.PI * i / M; o.pos.push(cx + r * Math.cos(a), cy + r * Math.sin(a), rings[k]); o.nrm.push(0, 0, sz); o.uv.push(0, 0.5); }
+    for (let i = 1; i <= M; i++) o.idx.push(e0, e0 + i, e0 + i + 1);
+  }
+  const from = b0 * 3;
+  const P = o.pos.slice(from), N = o.nrm.slice(from);
+  bendHeadband(P, N, cx, zEnd, Rb);
+  for (let i = 0; i < P.length; i++) { o.pos[from + i] = P[i]; o.nrm[from + i] = N[i]; }
+  return o;
+}
+/* The headband as the open book has it (amt 1; 0, as the model has it, closed; between, on its way): set half into
+   the spine, its middle on the back of the pages; long enough to run from joint to joint, less its own thickness,
+   so that its ends stay within the leaves however few there are on one side; resting on the heads of the leaves
+   rather than sunk into them (open, the leaves dip into the gutter beside it, and it would come up through them);
+   and its ends curving down into the spine. */
+function obHeadbandShape(p, d, amt, data){
+  // (made again from the model's own headbands, their size and place read from it: that way a model made before
+  // their ends were curved gets them too, the roll having the rings along it to curve)
+  let lo = Infinity, hi = -Infinity, zm = 0, reps = 0, yTop = -Infinity;
+  for (let j = 0; j < p.pos.length; j += 3) { lo = Math.min(lo, p.pos[j]); hi = Math.max(hi, p.pos[j]); zm = Math.max(zm, Math.abs(p.pos[j + 2])); yTop = Math.max(yTop, p.pos[j + 1]); }
+  if (p.uv) for (let j = 0; j < p.uv.length; j += 2) reps = Math.max(reps, p.uv[j]);
+  const r = (hi - lo) / 2, cx0 = (lo + hi) / 2, cy0 = yTop - r;
+  const cx = cx0 + (d.xl - cx0) * amt, cy = cy0 + 1.3 * r * amt;
+  const zEnd = zm * (1 + (Math.max(1, (d.zo - 2 * r) / Math.max(1e-6, zm)) - 1) * amt), rp = Math.max(1, reps || Math.round(zm / Math.max(1e-6, r))) * zEnd / zm;
+  const o = {pos:[], nrm:[], uv:[], idx:[]};
+  // (the spine's hollow as deep as its outline at its ends is: not by the raised bands, which don't reach there)
+  const arc = data ? spineArc(data) : [], dep = (arc.length ? d.xl - Math.min(...arc.map(q => q[0])) : (d.round || 0) * 2 * d.py1) + (d.xl - cx);
+  for (const s of [1, -1]) headbandTube(cx, s * cy, r, zEnd, rp, o, [dep, d.zo]);
+  return o;
+}
+// A flat polygon's triangles (by cutting off its ears one at a time), as indices into it: so that a face that isn't
+// convex covers just itself, and nothing beside it (which would flicker against whatever lies there).
+function obTriangulate(P){
+  const n = P.length; if (n < 3) return [];
+  let area = 0; for (let i = 0; i < n; i++) { const a = P[i], b = P[(i + 1) % n]; area += a[0] * b[1] - b[0] * a[1]; }
+  const sg = area >= 0 ? 1 : -1, idx = [...Array(n).keys()], out = [];
+  const cr = (a, b, c) => (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+  let guard = 0;
+  while (idx.length > 3 && guard++ < 4 * n) {
+    let cut = false;
+    for (let i = 0; i < idx.length; i++) {
+      const ia = idx[(i + idx.length - 1) % idx.length], ib = idx[i], ic = idx[(i + 1) % idx.length], a = P[ia], b = P[ib], c = P[ic];
+      const z = sg * cr(a, b, c);
+      if (z < -1e-14) continue;
+      if (z <= 1e-14) { idx.splice(i, 1); cut = true; break; }   // (in line: no triangle)
+      let inside = false;
+      for (const j of idx) {
+        if (j === ia || j === ib || j === ic) continue;
+        const p = P[j]; if (sg * cr(a, b, p) >= 0 && sg * cr(b, c, p) >= 0 && sg * cr(c, a, p) >= 0) { inside = true; break; }
+      }
+      if (inside) continue;
+      out.push(ia, ib, ic); idx.splice(i, 1); cut = true; break;
+    }
+    if (!cut) break;
+  }
+  if (idx.length === 3) out.push(...idx);
+  return out;
+}
+// A flat face at y (+-), the polygon poly of [x, z, k] points (k scaling y), its photo placed by cap.
+function obFlat(mesh, poly, Y, cap){
+  const P = poly.filter((p, i) => Math.hypot(p[0] - poly[(i + 1) % poly.length][0], p[1] - poly[(i + 1) % poly.length][1]) > 1e-9);
+  const tri = obTriangulate(P);
+  for (const y of [1, -1]) {
+    const b0 = mesh.pos.length / 3;
+    for (const p of P) obVert(mesh, [p[0], y * Y * p[2], p[1]], [0, y, 0], cap(p));
+    for (const t of tri) mesh.idx.push(b0 + t);
+  }
+}
+/* The inside corner where the outside of a board (or of the joint) meets the round of the spine, filled with the
+   covering curving from the one into the other: from the line along the board's outside (through C, running
+   towards the spine as t0) a way out along it (L), round to the spine's outline as far along it. Nothing if the
+   spine runs straight on from the board there. arc: the spine's outline from C outwards. */
+function obFillet(cover, ends, C, t0, arc, L, Y, tx, cap, inside, spine){
+  // (smaller, if need be, until it lies clear of the spine's outline; none, if it can't)
+  for (let tries = 0; tries < 5; tries++, L /= 2) if (obFilletTry(cover, ends, C, t0, arc, L, Y, tx, cap, inside, spine)) return;
+}
+// Whether point q lies inside the outline P (by counting crossings).
+function obInside(P, q){
+  let c = false;
+  for (let i = 0, j = P.length - 1; i < P.length; j = i++) {
+    const a = P[i], b = P[j];
+    if ((a[1] > q[1]) !== (b[1] > q[1]) && q[0] < (b[0] - a[0]) * (q[1] - a[1]) / (b[1] - a[1]) + a[0]) c = !c;
+  }
+  return c;
+}
+function obFilletTry(cover, ends, C, t0, arc, L, Y, tx, cap, inside, spine){
+  if (arc.length < 3 || !(L > 0)) return true;
+  const tl = Math.hypot(t0[0], t0[1]) || 1, t = [t0[0] / tl, t0[1] / tl];
+  const P0 = [C[0] - t[0] * L, C[1] - t[1] * L, C[2]];
+  // (a corner to fill only if the spine goes off to the outside of the board's line, away from the board's inside)
+  const side = q => t[0] * (q[1] - C[1]) - t[1] * (q[0] - C[0]), mid = arc[Math.min(arc.length - 1, 2)];
+  if (!(side(mid) * side(inside) < 0)) return true;
+  let j = 1, run = 0;
+  for (; j < arc.length - 1; j++) { run += Math.hypot(arc[j][0] - arc[j - 1][0], arc[j][1] - arc[j - 1][1]); if (run >= L) break; }
+  const Q = arc[j], tq = [arc[Math.min(arc.length - 1, j + 1)][0] - arc[j - 1][0], arc[Math.min(arc.length - 1, j + 1)][1] - arc[j - 1][1]];
+  // (the corner has to open outwards: the spine turning away from the board's line, not on along it)
+  const den = t[0] * tq[1] - t[1] * tq[0];
+  if (Math.abs(den) < 1e-9 * Math.hypot(tq[0], tq[1])) return true;
+  const s0 = ((Q[0] - P0[0]) * tq[1] - (Q[1] - P0[1]) * tq[0]) / den;
+  if (!(s0 > 1e-9)) return false;
+  const K = [P0[0] + t[0] * s0, P0[1] + t[1] * s0, C[2]];
+  const path = [P0]; for (let i = 1; i <= 12; i++) { const u = i / 12; path.push([0, 1, 2].map(q => (1 - u) * (1 - u) * P0[q] + 2 * u * (1 - u) * K[q] + u * u * Q[q])); }
+  const poly = [...path]; for (let i = j - 1; i >= 0; i--) poly.push(arc[i]);
+  if (obCrosses(poly)) return false;
+  // (nor over the end of the spine itself, where the spine's round dips past the board's line)
+  if (spine && spine.length > 2 && path.slice(1, -1).some(q => obInside(spine, q))) return false;
+  obCoverStrips(cover, path, tx, Y);
+  obFlat(ends, poly, Y, cap);
+  return true;
+}
+/* A joint where a board lies out from the spine, closed like the board itself: the covering running taut from the
+   board's outside edge (Bo) onto the round of the spine (arc: the spine's outline at its end, from its edge C
+   outwards), so the board and the spine meet across the board's whole thickness; and its ends, at the head and the
+   tail (at y = +-Y), filled from the board's edge (inside corner Bi, outside Bo) round to the spine's edge and in to
+   the back of the leaves (In). Points are [x, z, k], k scaling their y (a board leaning as it stands up). cap(pt) is
+   where the photo of the boards' edges falls on a point of the ends; us, the column of the spine's photo for the
+   covering. */
+function obJointFill(cover, ends, Bo, Bi, C, In, arc, Y, tx, cap, toSpine){
+  // The board's outside carried on towards the spine until it meets the spine's own outline (X): the covering runs
+  // there, and the spine's round carries on from it, so the covering never spreads over the spine itself. (Where the
+  // board's line misses the spine, it runs to the spine's edge, C.) Returns where it meets the spine, the way it ran,
+  // and the spine's outline from there on outwards, for the corner there to be rounded (obFillet).
+  const t0 = toSpine || [C[0] - Bo[0], C[1] - Bo[1]], tl = Math.hypot(t0[0], t0[1]) || 1, t = [t0[0] / tl, t0[1] / tl];
+  let X = null, k = -1;
+  for (let i = 0; i < arc.length - 1 && !X; i++) {
+    const a = arc[i], b = arc[i + 1], e = [b[0] - a[0], b[1] - a[1]], den = t[0] * e[1] - t[1] * e[0];
+    if (Math.abs(den) < 1e-14) continue;
+    const sB = ((a[0] - Bo[0]) * e[1] - (a[1] - Bo[1]) * e[0]) / den, u = ((a[0] - Bo[0]) * t[1] - (a[1] - Bo[1]) * t[0]) / den;
+    if (u >= -1e-9 && u <= 1 + 1e-9 && sB >= -1e-6) { X = [Bo[0] + t[0] * Math.max(0, sB), Bo[1] + t[1] * Math.max(0, sB), (a[2] + b[2]) / 2]; k = i; }
+  }
+  let path, poly, from;
+  if (X) {
+    path = [Bo, X]; poly = [Bi, Bo, X]; for (let i = k; i >= 1; i--) poly.push(arc[i]); poly.push(C, In);
+    from = [X, ...arc.slice(k + 1)];
+  } else { path = [Bo, C]; poly = [Bi, Bo, C, In]; from = arc; }
+  if (obCrosses(poly)) { path = [Bo, C]; poly = [Bi, Bo, C, In]; from = arc; }
+  obCoverStrips(cover, path, tx, Y);
+  obFlat(ends, poly, Y, cap);
+  return {corner:from[0], dir:t, from};
+}
+/* The covering round a joint: the board's own photo (the covering runs on from the spine onto the board, and the
+   board's photo is of it), a strip of it from just beside the spine, at its true size and the same way round as on the
+   board, laid along the path (of [x, z, k] points, ending on the spine) by how far along it each point is: tx = {uS:
+   where across the board's photo the spine's end falls, dir: which way across it is away from the spine (+1 or -1), W:
+   the board's width}. Along the book's length, y from -Y to Y, the photo's height. */
+function obCoverStrips(cover, path, tx, Y){
+  // (kept to the plain margin of the photo beside the spine, where there's rarely any decoration: a long way round
+  // the joint is squeezed into it a little rather than reaching the tooling further in)
+  const run = [0]; for (let i = path.length - 2; i >= 0; i--) run.unshift(run[0] + Math.hypot(path[i + 1][0] - path[i][0], path[i + 1][1] - path[i][1]));
+  const most = 0.03, k = Math.min(1, most / Math.max(1e-9, run[0] / Math.max(1e-6, tx.W)));
+  const us = run.map(r => tx.uS + tx.dir * k * r / Math.max(1e-6, tx.W));
+  for (let i = 0; i < path.length - 1; i++) {
+    const a = path[i], b = path[i + 1], n = [b[1] - a[1], 0, a[0] - b[0]];
+    if (Math.hypot(n[0], n[2]) <= 1e-9) continue;
+    obQuad(cover, [[a[0], Y * a[2], a[1]], [b[0], Y * b[2], b[1]], [b[0], -Y * b[2], b[1]], [a[0], -Y * a[2], a[1]]], n, [[us[i], 0], [us[i + 1], 0], [us[i + 1], 1], [us[i], 1]]);
+  }
+}
+// Whether a closed outline crosses itself (so that it can't be filled as one face).
+function obCrosses(P){
+  const n = P.length, cr = (o, p, q) => (p[0] - o[0]) * (q[1] - o[1]) - (p[1] - o[1]) * (q[0] - o[0]);
+  for (let i = 0; i < n; i++) for (let k = i + 2; k < n; k++) {
+    if (i === 0 && k === n - 1) continue;
+    const a = P[i], b = P[(i + 1) % n], c = P[k], d = P[(k + 1) % n];
+    if (cr(a, b, c) * cr(a, b, d) < -1e-18 && cr(c, d, a) * cr(c, d, b) < -1e-18) return true;
+  }
+  return false;
+}
+// How far the inside corner where a board meets the spine is rounded, in the model's units.
+const obFilletR = d => Math.max(1.2 * (d.zo - d.zi), 0.016 * 2 * d.py1);
+// The spine's outline at its end, as [x, z] in the model (from its vertices at the head), in order round it.
+function spineArc(data){
+  const p = data && data.find(q => q.name === 'spine'); if (!p) return [];
+  let top = -Infinity; for (let i = 1; i < p.pos.length; i += 3) top = Math.max(top, p.pos[i]);
+  const pts = [];
+  for (let i = 0; i < p.pos.length; i += 3) if (Math.abs(p.pos[i + 1] - top) < 1e-6) pts.push([p.pos[i], p.pos[i + 2]]);
+  pts.sort((a, b) => a[1] - b[1]);
+  return pts.filter((q, i) => !i || Math.abs(q[1] - pts[i - 1][1]) + Math.abs(q[0] - pts[i - 1][0]) > 1e-7);
+}
+// The headband drawn in the model as a cover swings: shaped as far towards the open book's as the book is open
+// (obHeadbandShape), and sinking with the spine as it does.
+function rd3Headband(gl, L, m, d, amt){
+  const data = m.data, i = data.findIndex(q => q.name === 'headband'); if (i < 0) return;
+  const g = m3Gpu(gl, m).find(q => q.name === 'headband'); if (!g) return;
+  const sh = obHeadbandShape(data[i], d, amt, data), mesh = obNew(), made = [];
+  mesh.pos = sh.pos; mesh.nrm = sh.nrm || sh.pos.map(() => 0); mesh.uv = sh.uv || sh.pos.filter((v, j) => j % 3 < 2).map(() => 0);
+  mesh.col = []; for (let j = 0; j < sh.pos.length / 3; j++) mesh.col.push(1, 1, 1, 1);
+  mesh.idx = Array.from(sh.idx);
+  const vm = obMesh(gl, made, mesh);
+  gl.uniform1i(L.uSwing, 2);
+  gl.bindTexture(gl.TEXTURE_2D, g.tex); if (g.tex) gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+  m3Part(gl, L, {vao:vm.vao, count:vm.count, base:g.base || [1, 1, 1, 1], cut:g.cut || 0, lit:g.lit !== false, tex:g.tex || null});
+  gl.uniform1i(L.uSwing, 0); gl.bindVertexArray(null);
+  for (const [kind, obj] of made) gl['delete' + kind](obj);
+}
+// How long a stretch of the photo of the boards' edges covers along an edge, in the model's units (1, without one).
+function rimTile(data){
+  const p = data && data.find(q => q.name === 'rim'); if (!p || !p.uv || !p.nrm) return 1;
+  let lo = null, hi = null;
+  for (let i = 0; i < p.pos.length / 3; i++) if (Math.abs(p.nrm[3 * i + 1]) > 0.9) {
+    const v = [p.pos[3 * i], p.uv[2 * i]]; if (!lo || v[0] < lo[0]) lo = v; if (!hi || v[0] > hi[0]) hi = v;
+  }
+  return lo && hi && Math.abs(hi[1] - lo[1]) > 1e-6 ? Math.abs((hi[0] - lo[0]) / (hi[1] - lo[1])) : 1;
+}
+// Draws the book (closed, or with t, a cover swinging) and shows it. False when it can't be drawn this way.
+function rd3Draw(t){
+  const d = RD.b3, m = RD.model && M3.cache.get(RD.model);
+  if (!d || !RD.look || !m || !m.data) return false;
+  if (FL.active) return true;   // still on its way up: the flight draws it
+  const f = m3Full(); if (!f) return false;
+  const {gl, L} = f, K = lastSpread();
+  if (!RD.g3 || RD.g3.gl !== gl || RD.g3.d !== d) RD.g3 = {gl, d, quads:rd3Quads(gl, d), strips:{}, tex:{}};
+  // Which board swings (the back one, turned over, at the end of the book), how far open it is, and the spread it opens at.
+  let back = RD.spread > K, o = 0, open = -1;
+  if (t && t.kind === 'rigid') {
+    back = Math.min(t.from, t.to) >= 0;
+    o = t.from < 0 || t.from > K ? t.p : 1 - t.p;
+    open = back ? Math.min(t.from, t.to) : Math.max(t.from, t.to);
+  }
+  const side = back ? -1 : 1, th = Math.PI * o, dist = RD3_FAR;
+  const st = $('readerStage').getBoundingClientRect();
+  const x = st.left + RD.ox + RD.shift + RD.W + RV.panX, y = st.top + RD.oy + RD.H / 2 + RV.panY, s = RD.H / (2 * d.py1) * RV.zoom;
+  const turn = back ? [-1,0,0,0, 0,1,0,0, 0,0,-1,0, 0,0,0,1] : m4.id();
+  gl.uniformMatrix4fv(L.uProj, false, m3Aim(x, y, s, dist, f.SW, f.SH, Math.max(0.01, dist - 2.5), dist + 2.5));
+  // (turned about the middle of the closed book, moving to the gutter as it opens, where the open book is turned
+  // about: so that, turned, the one takes over from the other where it lies. It moves as the board does, easing
+  // in and out with it, so that it's still once the board lies down.)
+  const om = (1 - Math.cos(th)) / 2, pc = (back ? -1 : 1) * (d.xr - d.xl) / 2 * (1 - om);
+  RD.rvLast = {x, y, s, dist, base:m4.mul(m4.trs([back ? d.xl : -d.xl, 0, -d.zi]), turn), pivot:[pc, 0, -d.zi * (1 - om)]};
+  gl.uniformMatrix4fv(L.uView, false, rvView(dist, RD.rvLast.pivot, RD.rvLast.base));
+  gl.uniform1f(L.uBright, M3_REST_BRIGHT); gl.uniform1f(L.uSide, side);
+  gl.uniform2f(L.uHinge, d.xl, side * d.zi); gl.uniform2f(L.uCS, Math.cos(th), Math.sin(th));
+  // The board swings round its joint, out from the back of the pages (see rd3Gap), and a page on it slides along it
+  // as it goes, to come down at the gutter.
+  const G = rd3GapAt(d, open >= 0 ? open : back ? K : 0, back);
+  gl.uniform1f(L.uGap, G / 2); gl.uniform1f(L.uShift, -G * om);
+  // (the spine keeps its shape as the cover swings, only coming down at its front edge, level with the leaves, as the
+  // board goes from over it: just as the open book has it)
+  gl.uniform1f(L.uOpen, o * (d.zo - d.zi + 0.002 * 2 * d.py1) / (2 * d.zo)); gl.uniform1f(L.uZo, d.zo); gl.uniform1f(L.uLean, Math.sin(th) / RD3_NEAR);
+  // The back of the book between the boards, as wide on each side as the open book will have it (in the model, it's
+  // as wide as the boards reach past the pages, on each side).
+  const sd = rdSpineSides(open >= 0 ? open : RD.spread), unit = 2 * d.py1 / RD.H / Math.max(1e-6, d.top - d.py1);
+  gl.uniform2f(L.uWin, sd.l * unit, sd.r * unit); gl.uniform1f(L.uWinH, sd.h); gl.uniform1f(L.uPy1, d.py1);
+  gl.uniform2f(L.uWinU, sd.shift * 2 * d.py1 / RD.H, sd.half * 2 * d.py1 / RD.H);
+  const d3 = obActive(), hA = rd3HingeA(d, open >= 0 ? open : back ? K : 0, back);
+  for (const p of m3Gpu(gl, m)) {
+    // (the flat reader shows the headband and the back of the book in its own picture of it, spineWindow; in 3D, the
+    // headband itself is drawn, below, as the open book has it, and the picture isn't)
+    if (p.name === 'headband' || (d3 && p.name === 'spineWindow')) continue;
+    gl.uniform1i(L.uSwing, p.name === 'spineWindow' ? 4 : RD3_BOARD.has(p.name) ? 1 : RD3_SPINE.has(p.name) ? 2 : 0);
+    // (the endpaper inside the board swinging open shared out with the joint, as the open book has it: obBuild)
+    const sq3 = d3 && ((p.name === 'insideFront' && !back) || (p.name === 'insideBack' && back)) ? hA : 1;
+    gl.uniform2f(L.uUv, sq3, p.name === 'insideBack' && sq3 < 1 ? 1 - sq3 : 0);
+    // (the back of the book: the reader's own picture of it, as the open book will show it)
+    m3Part(gl, L, p.name === 'spineWindow' ? Object.assign({}, p, {tex:rdWindowTex(gl, open >= 0 ? open : RD.spread)}) : p);
+  }
+  gl.uniform1i(L.uSwing, 0); gl.uniform2f(L.uUv, 1, 0);
+  if (d3) rd3Headband(gl, L, m, d, om);
+  if (G > 0 && o > 0) rd3Joint(gl, L, m, d, side, th, o * (d.zo - d.zi + 0.002 * 2 * d.py1) / (2 * d.zo), Math.sin(th) / RD3_NEAR, G);
+  if (o > 0 && open >= 0 && open <= K) {
+    const q = RD.g3.quads[back ? 'back' : 'front'];
+    // At the front, the board carries the left page and the block has the right; at the back, the other way round.
+    // Beside each, the edges of the pages under it, just as the reader draws them.
+    for (const [slot, pg, left, swing] of [['board', back ? 2 * open + 1 : 2 * open, !back, 3], ['block', back ? 2 * open : 2 * open + 1, back, 0]]) {
+      gl.uniform1i(L.uSwing, swing);
+      const e = rdEdgeSplit(left, open);
+      if (pg >= 1 && pg <= RD.n) m3Part(gl, L, Object.assign({}, q[slot], {tex:rd3PageTex(gl, slot, pg, left ? 0 : RD.W, open, e)}));
+      if (e.out) m3Part(gl, L, Object.assign({}, rd3Strip(gl, back, slot, e.out / s), {tex:rd3EdgeTex(gl, slot + 'Edge', e, left)}));
+    }
+  }
+  gl.bindVertexArray(null); gl.uniform1i(L.uSwing, 0); gl.uniform1f(L.uBright, 0); gl.uniform1f(L.uGap, 0); gl.uniform1f(L.uShift, 0);
+  const c = f.cv.getContext('2d'); c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, f.W, f.H); c.drawImage(f.g, 0, 0);
+  rd3Show();
+  return true;
+}
+// The model coming into view over the reader (fading in, over the open book it starts from), and going again.
+function rd3Show(){
+  const cv = $('readerFlight');
+  clearTimeout(RD.v3Timer);
+  if (cv.hidden) { cv.hidden = false; RD.v3At = performance.now(); cv.classList.remove('entering'); void cv.offsetWidth; cv.classList.add('entering'); }
+  cv.classList.remove('landing');
+  RD.v3 = true;
+}
+function rd3Leave(){
+  if (!RD.v3) return;
+  RD.v3 = false;
+  const cv = $('readerFlight'); cv.classList.add('landing');
+  clearTimeout(RD.v3Timer);
+  RD.v3Timer = setTimeout(() => { if (!RD.v3) { cv.hidden = true; cv.classList.remove('landing', 'entering'); } }, 320);
+}
+/* The open book in 3D (a first try, to judge the look by). A book made with one of the journal's book models,
+   lying open, is drawn as a solid book rather than a flat picture: the boards, with the endpapers pasted inside
+   them; the two stacks of leaves, as thick as the pages on each side, their top leaves (the pages being read)
+   curving down into the gutter where they meet; the back of the book hollow between the boards at the head and the
+   tail, with the headbands down in it. A leaf goes over bending round the spine (obLeaf); a cover swings in the
+   model itself (rd3Draw). Units: a page's height. */
+const OB = {on:true};
+/* How the book is being held (3D only): turned (yaw, round the up-and-down of the screen, and pitch), moved (panX,
+   panY, in pixels) and brought nearer (zoom). Dragging turns it, Shift-drag (or the right button) moves it, the wheel
+   brings it nearer, a double-click puts it back; it's put back before the book goes back where it came from. */
+const RV = {yaw:0, pitch:0, zoom:1, panX:0, panY:0};
+const rvReset = () => Object.assign(RV, {yaw:0, pitch:0, zoom:1, panX:0, panY:0});
+const rvHome = () => Math.abs(RV.yaw) < 1e-3 && Math.abs(RV.pitch) < 1e-3 && Math.abs(RV.zoom - 1) < 1e-3 && Math.abs(RV.panX) < 0.5 && Math.abs(RV.panY) < 0.5;
+function rvRot(){
+  const cy = Math.cos(RV.yaw), sy = Math.sin(RV.yaw), cp = Math.cos(RV.pitch), sp = Math.sin(RV.pitch);
+  return m4.mul([1,0,0,0, 0,cp,sp,0, 0,-sp,cp,0, 0,0,0,1], [cy,0,-sy,0, 0,1,0,0, sy,0,cy,0, 0,0,0,1]);
+}
+// The view, looking from dist away at pivot (where the book is turned about), after base.
+const rvView = (dist, pivot, base) => m4.mul(m4.trs([pivot[0], pivot[1], pivot[2] - dist]), m4.mul(rvRot(), m4.mul(m4.trs(pivot.map(v => -v)), base)));
+// Puts the book back as it was, over a moment (resolves once it's there).
+function rvGoHome(ms = 380){
+  if (rvHome()) { rvReset(); return Promise.resolve(); }
+  const from = Object.assign({}, RV), t0 = performance.now();
+  // (turned back the shorter way round)
+  from.yaw = Math.atan2(Math.sin(from.yaw), Math.cos(from.yaw)); from.pitch = Math.atan2(Math.sin(from.pitch), Math.cos(from.pitch));
+  return new Promise(done => {
+    const step = now => {
+      const u = Math.min(1, (now - t0) / ms), e = 1 - Math.pow(1 - u, 3);
+      for (const k of ['yaw', 'pitch', 'panX', 'panY']) RV[k] = from[k] * (1 - e);
+      RV.zoom = from.zoom + (1 - from.zoom) * e;
+      drawReader();
+      if (u < 1) requestAnimationFrame(step); else { rvReset(); drawReader(); done(); }
+    };
+    requestAnimationFrame(step);
+  });
+}
+try { OB.on = localStorage.getItem('journal-reader-3d') !== '0'; } catch (e) {}
+const obActive = () => OB.on && !!RD.b3 && !!RD.look;
+function obShowButton(){
+  const b = $('reader3d'); b.hidden = !(RD.b3 && RD.look); b.setAttribute('aria-pressed', OB.on ? 'true' : 'false');
+  document.querySelector('.reader-help').textContent = obActive()
+    ? 'Drag to turn the book, Shift-drag to move it, scroll to zoom, double-click to straighten it; click a page or use the arrow keys'
+    : 'Drag a corner, click a page, or use the arrow keys';
+}
+$('reader3d').addEventListener('click', () => {
+  OB.on = !OB.on;
+  try { localStorage.setItem('journal-reader-3d', OB.on ? '1' : '0'); } catch (e) {}
+  RD.turn = null; if (!OB.on) rvReset();
+  obShowButton(); drawReader(); rdCanvas.focus();
+});
+// A colour ('rgb(…)', '#rrggbb' or [r, g, b]) as the shader takes it.
+function obColour(css, fallback){
+  let v = Array.isArray(css) ? css : null, m = typeof css === 'string' && /rgba?\(([^)]+)\)/.exec(css);
+  if (m) v = m[1].split(',').slice(0, 3).map(Number);
+  else if (typeof css === 'string' && /^#[0-9a-f]{6}$/i.test(css)) v = [1, 3, 5].map(i => parseInt(css.slice(i, i + 2), 16));
+  return toLinear(v || fallback);
+}
+// A picture on the graphics card, made again only when key changes.
+function obTex(gl, slot, key, src){
+  const T = RD.obTex || (RD.obTex = new Map());
+  let rec = T.get(slot);
+  if (rec && rec.gl === gl && rec.key === key) { rec.used = performance.now(); return rec.tex; }
+  if (!rec || rec.gl !== gl) { rec = {gl, tex:gl.createTexture()}; T.set(slot, rec); }
+  rec.used = performance.now();
+  gl.bindTexture(gl.TEXTURE_2D, rec.tex);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false); gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, src);
+  gl.generateMipmap(gl.TEXTURE_2D);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  const an = gl.getExtension('EXT_texture_filter_anisotropic');
+  if (an) gl.texParameterf(gl.TEXTURE_2D, an.TEXTURE_MAX_ANISOTROPY_EXT, Math.min(8, gl.getParameter(an.MAX_TEXTURE_MAX_ANISOTROPY_EXT)));
+  rec.key = key;
+  return rec.tex;
+}
+// Page p as a picture: its paper, and the PDF's page on it (at the sharpness it was drawn at). Each page keeps its
+// own picture on the graphics card while it's near where the book is open, so a leaf going over (its two sides, and
+// the pages under it) doesn't have them made again; those further off are let go of. (A page that isn't in the
+// book, as past the last leaf, is plain paper.)
+function obPage(gl, p){
+  const inBook = p >= 1 && p <= RD.n, src = inBook ? rdSrc(p) : {blank:true}, e = src.pdf && RD.cache.get(p), W = RD.W, H = RD.H;
+  const slot = 'pg' + (inBook ? p : 0);
+  const key = [RD.gen, p, e ? e.pgen + ':' + e.canvas.width : '-', W, H, RD.dpr].join();
+  const T = RD.obTex && RD.obTex.get(slot);
+  if (T && T.gl === gl && T.key === key) { T.used = performance.now(); return T.tex; }
+  if (RD.obTex) {   // (those used longest ago go; those being drawn are used for every picture)
+    const pgs = [...RD.obTex.keys()].filter(s => /^pg\d+$/.test(s) && s !== slot && s !== 'pg0');
+    if (pgs.length > 9) {
+      const used = s => RD.obTex.get(s).used || 0;
+      for (const s of pgs.sort((a, b) => used(a) - used(b)).slice(0, pgs.length - 9)) {
+        const r = RD.obTex.get(s); if (r.gl === gl) gl.deleteTexture(r.tex); RD.obTex.delete(s);
+      }
+    }
+  }
+  const k = RD.dpr * 1.25, cv = document.createElement('canvas');
+  cv.width = Math.max(1, Math.round(W * k)); cv.height = Math.max(1, Math.round(H * k));
+  const c = cv.getContext('2d'); c.setTransform(k, 0, 0, k, 0, 0);
+  if (src.end) rdFill(c, RD.look.endsheet, 0, 0, W, H, READER_PAPER); else rdPaper(c, 0, 0, W, H);
+  if (e) {
+    let w = W, h = W / e.ratio; if (h > H) { h = H; w = H * e.ratio; }
+    c.save(); if (RD.look && RD.look.paper) c.globalCompositeOperation = 'multiply';
+    c.imageSmoothingQuality = 'high'; c.drawImage(e.canvas, (W - w) / 2, (H - h) / 2, w, h); c.restore();
+  } else if (src.pdf) {   // not drawn yet: its number, as the flat book shows it
+    c.fillStyle = 'rgba(30,39,35,.3)'; c.font = 'italic ' + Math.round(Math.max(11, H * 0.028)) + 'px Spectral, Georgia, serif';
+    c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(String(src.pdf), W / 2, H / 2);
+  }
+  return obTex(gl, slot, key, cv);
+}
+// Triangles on the graphics card: positions, normals, colours (a shade each), texture positions, and indices.
+function obMesh(gl, made, m){
+  // Each triangle wound so that its front is the side its normals face (the light falls on the front).
+  const P = m.pos, Nn = m.nrm, I = m.idx;
+  for (let t = 0; t < I.length; t += 3) {
+    const [a, b, c] = [I[t], I[t + 1], I[t + 2]], v = i => [P[3 * i], P[3 * i + 1], P[3 * i + 2]];
+    const A = v(a), B = v(b), C = v(c), e1 = B.map((x, i) => x - A[i]), e2 = C.map((x, i) => x - A[i]);
+    const cr = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]];
+    let dot = 0; for (const i of [a, b, c]) for (let j = 0; j < 3; j++) dot += cr[j] * Nn[3 * i + j];
+    if (dot < 0) { I[t + 1] = c; I[t + 2] = b; }
+  }
+  const vao = gl.createVertexArray(); gl.bindVertexArray(vao); made.push(['VertexArray', vao]);
+  for (const [loc, data, size] of [[0, m.pos, 3], [1, m.nrm, 3], [2, m.col, 4], [3, m.uv, 2]]) {
+    const b = gl.createBuffer(); made.push(['Buffer', b]); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(data), gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, size, gl.FLOAT, false, 0, 0);
+  }
+  const ib = gl.createBuffer(); made.push(['Buffer', ib]); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib);
+  gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint32Array(m.idx), gl.STATIC_DRAW);
+  gl.bindVertexArray(null);
+  return {vao, count:m.idx.length};
+}
+const obNew = () => ({pos:[], nrm:[], col:[], uv:[], idx:[]});
+function obVert(m, p, n, uv, shade){
+  const l = Math.hypot(...n) || 1, s = Math.pow(shade === undefined ? 1 : shade, 2.2);
+  m.pos.push(...p); m.nrm.push(n[0] / l, n[1] / l, n[2] / l); m.col.push(s, s, s, 1); m.uv.push(...uv);
+  return m.pos.length / 3 - 1;
+}
+// A flat four-sided face, its corners in order round it.
+function obQuad(m, pts, n, uvs, shades){
+  const i = pts.map((p, j) => obVert(m, p, n, uvs ? uvs[j] : [0, 0], shades ? shades[j] : 1));
+  m.idx.push(i[0], i[1], i[2], i[0], i[2], i[3]);
+}
+/* The book's shape: the parts to draw ({mesh, tex or colour}). Lying open at spread k, each side is as the book open
+   at k has it. While a leaf goes over, each side is as it'll be with the leaf off it (spec: the spread each side is as,
+   kL and kR, and the page on top of each, pL and pR): the leaf itself is drawn over them (obLeaf).
+   The book is the model itself, opened: its two boards, just as the model has them (covers, insides, turn-ins, the
+   photos on their edges), and its spine, just as the model has it (its round, as deep as the model's, the spine photo,
+   the raised bands, the headcaps and their photos, the headbands), neither of them changed in shape, only moved; and
+   between them, the leaves, in two stacks with the model's page edges on them. The pages lie level, as on a reading
+   cradle. The spine turns round with the book as it opens: at the endpapers it stands at the end of the closed book on
+   the other side, exactly as the model has it closed (the open board lying level with the top of the leaves, as a
+   board swung open does); open in the middle, it hangs under the book between the boards, its round down; in between,
+   it turns gradually from the one to the other. The leaves end at the back of the book, inside the spine, as in the
+   model; the headcaps close the spine's ends over them. */
+const OB_BOARD = new Set(['front', 'back', 'insideFront', 'insideBack', 'endpaper', 'rim', 'board']);
+const OB_SPINE = new Set(['spine', 'headcap', 'tailcap', 'capSide', 'headWall', 'headband']);
+function obBuild(gl, spec){
+  const d = RD.b3, look = RD.look, Wp = RD.W / RD.H, sq = rdMargin() / RD.H, k = 1 / (2 * d.py1);
+  const mm = M3.cache.get(RD.model), data = mm.data, gpu = m3Gpu(gl, mm);
+  const Tn = Math.max(0.01, d.zi / d.py1), bt = Math.max(0.004, (d.zo - d.zi) / (2 * d.py1));
+  const n = Math.max(1, RD.n), fOf = kk => Math.min(1, Math.max(0, 2 * kk / n));
+  const hasL = 2 * spec.kL >= 1 && spec.pL >= 1, hasR = 2 * spec.kR + 1 <= RD.n && spec.pR <= RD.n;
+  // (while a leaf goes over, how far in the book lies open goes on smoothly from where it was to where it'll be,
+  // as the leaf goes: spec.fc)
+  const fcL = spec.fc === undefined ? fOf(spec.kL) : spec.fc, fcR = spec.fc === undefined ? fOf(spec.kR) : spec.fc;
+  const stack = [hasL ? Math.max(0.0015, Tn * fcL) : 0, hasR ? Math.max(0.0015, Tn * (1 - fcR)) : 0];
+  const rest = [null, null], shades = [null, null], lay = [null, null];   // (lay: where the top leaf of each side lies, u along it from the fold)   // (the top of each side, and its shade, for the leaf to lie on)
+  const Y = 0.5, s = Tn * 0.5 + bt;   // (s: half the closed book's thickness, the width of the spine from joint to joint)
+  // How far into the book it's open (0 at the front, 1 at the back); sn is 0 at either end and 1 in the middle.
+  const f = (fcL + fcR) / 2, sn = Math.sin(Math.PI * f);
+  // The spine's chord (from the front board's side, CL, to the back board's, CR: the model's spine from the front
+  // cover's outside to the back cover's), turned so that the pages lie level: upright at either end, level in the
+  // middle. The board on the thick side keeps to its end of it; the one on the thin side lies a little lower than its
+  // end, level with the top of the leaves, as a board swung open over its joint does (lam, gone by the middle).
+  // (towards the ends, the spine's front edge comes down level with the top of the leaves, the board having gone from
+  // over it: the spine a little shorter across, Lc, just as the cover swinging open leaves it)
+  const Lc = 2 * s - (bt + 0.002) * (1 - sn), lam = (bt - 0.002) * (1 - sn);
+  const sth = (f < 0.5 ? 1 : -1) * Math.min(1, (Tn * Math.abs(1 - 2 * f) + lam) / Lc), cth = Math.sqrt(Math.max(0, 1 - sth * sth));
+  const Mz = Lc / 2 * Math.abs(sth), CL = [-Lc / 2 * cth, Mz + Lc / 2 * sth], CR = [Lc / 2 * cth, Mz - Lc / 2 * sth];
+  const c = [(CR[0] - CL[0]) / Lc, (CR[1] - CL[1]) / Lc], B = [c[1], -c[0]];   // (along the chord; and out, away from the pages)
+  // Each board: its outside at z0[side], its inside (the endpaper pasted down, and the leaves on it) at base[side].
+  const z0 = f < 0.5 ? [CL[1] - lam, CR[1]] : [CL[1], CR[1] - lam], base = z0.map(z => z + bt);
+  const zT = [base[0] + stack[0], base[1] + stack[1]];
+  // The model's spine, moved into place: its joint line (x = xl) onto the chord, its round out from it.
+  const spineAt = (x, z) => { const a = (d.zo - z) * k * Lc / (2 * s), b = (d.xl - x) * k; return [CL[0] + c[0] * a + B[0] * b, CL[1] + c[1] * a + B[1] * b]; };
+  const spineN = (nx, nz) => [-nx * B[0] - nz * c[0], -nx * B[1] - nz * c[1]];
+  // Where each board's edge is at the spine: at its end of the chord, as the model has it (where the spine turns past
+  // the board on the thin side, it passes inside the board, out of sight, just as it does in the model).
+  const xJ = [CL[0], CR[0]];
+  // Each board lies out from there by as far as it's swung open from the spine (over the joint, which is out from
+  // the back of the pages: rd3Gap), as the board swinging open in the model does: all of it where the spine stands
+  // up and the board lies flat, half each in the middle of the book, where the spine hangs under it.
+  const G = rd3Gap(d) * k, xB = [xJ[0] - G / 2 * (1 - c[1]), xJ[1] + G / 2 * (1 + c[1])];
+  // (and no nearer the spine than where the spine's round comes down to the board's outside: where the round swells
+  // out past the board's edge, the board lies out to meet it, rather than sitting on the spine)
+  {
+    const arcM = spineArc(data);
+    for (const [side, sg] of [[0, -1], [1, 1]]) {
+      const zq = (f < 0.5 ? [CL[1] - lam, CR[1]] : [CL[1], CR[1] - lam])[side];
+      const pts = arcM.map(([x, z]) => spineAt(x, Math.max(-d.zo, Math.min(d.zo, z)))); if (!side) pts.reverse();
+      for (let i = 0; i < pts.length - 1; i++) {
+        const a = pts[i], b = pts[i + 1];
+        if ((a[1] - zq) * (b[1] - zq) <= 0 && Math.abs(b[1] - a[1]) > 1e-12) {
+          const xq = a[0] + (b[0] - a[0]) * (zq - a[1]) / (b[1] - a[1]);
+          if (sg * (xq - xB[side]) > 0) xB[side] = xq;
+          break;
+        }
+      }
+    }
+  }
+  // Where the leaves of the two sides meet: on the back of the leaves (the chord, inside the spine), as far along it as
+  // the book is open (with no leaves on one side, as while the first or the last leaf goes over, at that side's end).
+  const fE = !stack[0] ? 0 : !stack[1] ? 1 : f, tf = Math.min(1, Math.max(0, (bt * sn + fE * (Lc - 2 * bt * sn)) / Lc));
+  const chordAt = t => [CL[0] + c[0] * Lc * t, CL[1] + c[1] * Lc * t];
+  const Gb = chordAt(tf), zG = Gb[1];
+  const made = [], parts = [];
+  const add = (m, how) => { if (m.idx.length) parts.push(Object.assign({mesh:obMesh(gl, made, m)}, how)); };
+  // (the insides of the boards aren't repeated: at their edges, a repeated picture would bring in a sliver of the other edge)
+  const mat = i => ({tex:gpu[i].tex || null, base:gpu[i].base || [1, 1, 1, 1], cut:gpu[i].cut || 0, lit:gpu[i].lit !== false,
+    repeat:!['insideFront', 'insideBack', 'endpaper'].includes(data[i].name)});
+  /* The endpaper running over the joint, from the board's edge (xb) in to the leaves (xg), at z: the board's own
+     picture of it, from just beside the spine, at its true size and the same way round, ending at the spine's edge
+     of the picture where it goes in among the leaves (as the free endpaper there carries on from it). */
+  const obHinge = (xb, xg, z, side) => {
+    const m = obNew(), YB = Y + sq;
+    const ub = side ? 1 - hingeA[1] : hingeA[0], ug = side ? 0 : 1, xa = Math.min(xb, xg), xz = Math.max(xb, xg), ua = xa === xb ? ub : ug, uz = xa === xb ? ug : ub;
+    obQuad(m, [[xa, YB, z], [xz, YB, z], [xz, -YB, z], [xa, -YB, z]], [0, 0, 1], [[ua, 0], [uz, 0], [uz, 1], [ua, 1]]);
+    return m;
+  };
+  // A part of the model, moved: its triangles that keep (by their middle), each point through place().
+  const moved = (p, keep, place, uvf) => {
+    const m = obNew(), at = new Map();
+    const v = i => {
+      if (at.has(i)) return at.get(i);
+      const r = place([p.pos[3 * i], p.pos[3 * i + 1], p.pos[3 * i + 2]], p.nrm ? [p.nrm[3 * i], p.nrm[3 * i + 1], p.nrm[3 * i + 2]] : [0, 0, 1]);
+      const u = p.uv ? p.uv[2 * i] : 0;
+      m.pos.push(...r[0]); m.nrm.push(...r[1]); m.col.push(1, 1, 1, 1); m.uv.push(uvf ? uvf(u) : u, p.uv ? p.uv[2 * i + 1] : 0);
+      at.set(i, m.pos.length / 3 - 1); return at.get(i);
+    };
+    for (let t = 0; t < p.idx.length; t += 3) {
+      const I = [p.idx[t], p.idx[t + 1], p.idx[t + 2]], mz = I.reduce((a, i) => a + p.pos[3 * i + 2], 0) / 3, mx = I.reduce((a, i) => a + p.pos[3 * i], 0) / 3;
+      if (keep(mx, mz)) m.idx.push(v(I[0]), v(I[1]), v(I[2]));
+    }
+    return m;
+  };
+  // The boards. The front one lies open on the left, turned over round its joint; the back one on the right, as it is.
+  const placeL = ([x, y, z], [nx, ny, nz]) => [[xB[0] - (x - d.xl) * k, y * k, (d.zi - z) * k + base[0]], [-nx, ny, -nz]];
+  const placeR = ([x, y, z], [nx, ny, nz]) => [[xB[1] + (x - d.xl) * k, y * k, (z + d.zi) * k + base[1]], [nx, ny, nz]];
+  const placeS = ([x, y, z], [nx, ny, nz]) => { const q = spineAt(x, z), nn = spineN(nx, nz); return [[q[0], y * k, q[1]], [nn[0], ny, nn[1]]]; };
+  /* The endpaper pasted inside each board runs on over the joint (obHinge) to the leaves, as one sheet: the picture of
+     the inside of the board is shared out over the two, the board taking all but the last sliver of it by the spine
+     (squeezed by the width of the joint, too little to see), the joint that sliver, so that the pattern runs on
+     unbroken from the one to the other. hingeA: the share the board takes, on each side. */
+  const hingeA = [0, 1].map(side => {
+    const Wb = (d.xr - d.xl) * k, end = stack[side] ? xJ[side] : Gb[0], w = Math.abs(xB[side] - end);
+    return Wb / (Wb + w);
+  });
+  // (the front's picture has the spine at its right, 1; the back's at its left, 0)
+  const insideUv = (name, side) => name === 'insideFront' && !side ? (u => u * hingeA[0]) : name === 'insideBack' && side ? (u => 1 - hingeA[1] + u * hingeA[1]) : null;
+  let inside = [-1, -1], iSpine = -1;
+  data.forEach((p, i) => {
+    if (OB_BOARD.has(p.name)) {
+      add(moved(p, (x, z) => z > 0, placeL, insideUv(p.name, 0)), mat(i)); add(moved(p, (x, z) => z < 0, placeR, insideUv(p.name, 1)), mat(i));
+      if (p.name === 'insideFront' || (p.name === 'endpaper' && inside[0] < 0)) inside[0] = i;
+      if (p.name === 'insideBack' || (p.name === 'endpaper' && inside[1] < 0)) inside[1] = i;
+    } else if (p.name === 'headband') {
+      // The headbands, open (obHeadbandShape): from joint to joint, over the heads (and tails) of all the leaves.
+      add(moved(Object.assign({}, p, obHeadbandShape(p, d, 1, data)), () => true, placeS), mat(i));
+    } else if (p.name === 'headWall') {
+      // (the inside of the spine's end, behind the headband: the whole way across, from joint to joint)
+      const pos = p.pos.slice(); for (let j = 2; j < pos.length; j += 3) pos[j] *= d.zo / d.zi;
+      add(moved(Object.assign({}, p, {pos}), () => true, placeS), mat(i));
+    } else if (OB_SPINE.has(p.name)) {
+      if (p.name === 'spine') iSpine = i;
+      // (the raised bands rise off the spine a little past its edges, where it meets the boards: open, that would
+      // come up through the joint beside the first and last leaves, so they're kept within the spine's thickness)
+      // (a headcap photographed reaches in over the leaves, closed; open, the covering turned in by the boards (below)
+      // does that instead, and the two, lying together, would flicker)
+      const inCap = (p.name === 'headcap' || p.name === 'tailcap') ? (x => x <= d.xl + 1e-6) : p.name === 'capSide' ? (() => false) : () => true;
+      add(moved(p, (x) => inCap(x), p.name === 'spine' ? ([x, y, z], n) => placeS([x, y, Math.max(-d.zo, Math.min(d.zo, z))], n) : placeS), mat(i));
+    }
+  });
+  // The joints, where the boards lie out from the spine: the covering running on from the spine's edge round the
+  // board's edge, and (on the inside, below) the endpaper running over from the board to the leaves.
+  // Each is the board carried on in to the spine, as thick as the board and as long, the covering running taut from
+  // the board's outside edge onto the round of the spine (obJointFill), its ends at the head and the tail closed as
+  // the board's edges are there; and where the leaves stop short of the ends, its side by them closed too.
+  if (G > 0) {
+    const YB = Y + sq, cover = obNew(), coverL = obNew(), coverR = obNew(), ends = obNew(), lipTop = obNew(), tile = rimTile(data) * k, arc0 = spineArc(data);
+    for (const [side, sg] of [[0, -1], [1, 1]]) {
+      const us = side ? 0.002 : 0.998, xe = xB[side], x0 = xJ[side], ze = z0[side], zb = base[side], Cc = side ? CR : CL;
+      // (the spine's outline at its end, open, from its edge by this board outwards, halfway round)
+      const arc = arc0.map(([x, z]) => { const zc = Math.max(-d.zo, Math.min(d.zo, z)), q = spineAt(x, zc); return [q[0], q[1], 1, (zc + d.zo) / (2 * d.zo)]; });
+      if (!side) arc.reverse();
+      // (the covering round the joint from this board's photo: the front's, on the left, runs 0 at the spine, the back's 1)
+      const C = [Cc[0], Cc[1], 1], tx = {uS:side ? 0.994 : 0.006, dir:side ? -1 : 1, W:(d.xr - d.xl) * k}, jc = side ? coverR : coverL;
+      if (arc.length) arc[0] = C;
+      const cap = p => [sg * (p[0] - xe) / tile, Math.min(1, Math.max(0, (p[1] - ze) / Math.max(1e-6, zb - ze)))];
+      const half = arc.slice(0, Math.ceil(arc.length / 2));
+      // (the joint; and where the covering along the board's outside meets the spine at a corner, the corner rounded
+      // inside it)
+      if (Math.abs(x0 - xe) < 1e-6) obFillet(jc, ends, C, [-sg, 0], half, obFilletR(d) * k, YB, tx, cap, [xe, zb], arc);
+      else { const jf = obJointFill(jc, ends, [xe, ze, 1], [xe, zb, 1], C, [x0, zb, 1], half, YB, tx, cap, [-sg, 0]);
+        obFillet(jc, ends, jf.corner, jf.dir, jf.from, obFilletR(d) * k, YB, tx, cap, [xe, zb], arc); }
+      if (zb - Cc[1] > 1e-6) for (const [ya, yb] of [[Y, YB], [-YB, -Y]])
+        obQuad(cover, [[x0, ya, Cc[1]], [x0, yb, Cc[1]], [x0, yb, zb], [x0, ya, zb]], [sg, 0, 0], [[us, 0], [us, 0], [us, 1], [us, 1]]);
+      // On the inside, beyond the heads (and tails) of the leaves, the covering turned in over the end of the spine
+      // (as a headcap is) from the inside of the board, rounding down onto the back of the leaves by the headband:
+      // so the board's end meets the spine across all its thickness, not at its outside edge only.
+      const cin = side ? [-c[0], -c[1]] : [c[0], c[1]], up = [-B[0], -B[1]];
+      const h = (x0 - Cc[0]) * up[0] + (zb - Cc[1]) * up[1], e = (x0 - Cc[0]) * cin[0] + (zb - Cc[1]) * cin[1];
+      if (h > 1e-5) {
+        const w = Math.max(e, 0) + h * 1.2, P = [Cc[0] + cin[0] * w, Cc[1] + cin[1] * w], K = [P[0] + up[0] * h, P[1] + up[1] * h], In = [x0, zb];
+        const curve = []; for (let i = 0; i <= 12; i++) { const t = i / 12; curve.push([0, 1].map(q => (1 - t) * (1 - t) * P[q] + 2 * t * (1 - t) * K[q] + t * t * In[q])); }
+        const poly = [[Cc[0], Cc[1], 1], ...curve.map(p => [p[0], p[1], 1])];
+        for (const [ya, yb] of [[Y, YB], [-YB, -Y]]) {
+          const Ym = (ya + yb) / 2, Yh = (yb - ya) / 2;
+          // its two ends (towards the leaves, and at the book's end) and its rounded top
+          // (its end level with the book's end, sharing its edge with the joint's end, so there's no crack between)
+          for (const yy of [ya, yb]) {
+            // (as the board's end is, so the two read as one)
+            const b0 = ends.pos.length / 3, tri = obTriangulate(poly.map(p => [p[0], p[1]]));
+            for (const p of poly) obVert(ends, [p[0], yy, p[1]], [0, Math.sign(yy - Ym) || 1, 0], cap(p));
+            for (const t of tri) ends.idx.push(b0 + t);
+          }
+          // (and closed along the back of the leaves, underneath)
+          obQuad(lipTop, [[Cc[0], yb, Cc[1]], [P[0], yb, P[1]], [P[0], ya, P[1]], [Cc[0], ya, Cc[1]]], [B[0], 0, B[1]], [[us, 0], [us, 0], [us, 1], [us, 1]]);
+          for (let i = 0; i < curve.length - 1; i++) {
+            const a = curve[i], b = curve[i + 1], n = [b[1] - a[1], 0, a[0] - b[0]];
+            if (Math.hypot(n[0], n[2]) > 1e-9)
+              obQuad(lipTop, [[a[0], yb, a[1]], [b[0], yb, b[1]], [b[0], ya, b[1]], [a[0], ya, a[1]]], n, [[us, 0], [us, 0], [us, 1], [us, 1]]);
+          }
+        }
+      }
+    }
+    add(cover, iSpine >= 0 ? mat(iSpine) : {colour:obColour(look.spineColour, [90, 30, 30])});
+    { const iF = data.findIndex(p => p.name === 'front'), iB = data.findIndex(p => p.name === 'back');
+      const fb = {colour:obColour(look.spineColour, [90, 30, 30])};
+      add(coverL, iF >= 0 ? mat(iF) : fb); add(coverR, iB >= 0 ? mat(iB) : iF >= 0 ? mat(iF) : fb); }
+    add(lipTop, iSpine >= 0 ? mat(iSpine) : {colour:obColour(look.spineColour, [90, 30, 30])});
+
+    const iRim = data.findIndex(p => p.name === 'rim'), iBoard = data.findIndex(p => p.name === 'board');
+    add(ends, iRim >= 0 ? mat(iRim) : iBoard >= 0 ? mat(iBoard) : {colour:obColour(look.spineColour, [90, 30, 30])});
+  }
+  // The page edges: the model's (plain, gilt, sprinkled or a photo), laid on as the model lays them.
+  const iEdge = data.findIndex(p => p.name === 'edges'), iGilt = data.findIndex(p => p.name === 'giltEdge');
+  let reps = 1; if (iEdge >= 0) { const uv = data[iEdge].uv; for (let i = 0; i < uv.length; i += 2) reps = Math.max(reps, Math.round(uv[i])); }
+  const faces = {head:obNew(), tail:obNew(), fore:obNew()};
+  // (across the edges, from the back board's side, 0, to the front's, 1: each point by the leaf it's on)
+  const across = (side, z) => Math.min(1, Math.max(0, side ? (1 - f) * (z - base[1]) / Math.max(1e-6, stack[1]) : 1 - f * (z - base[0]) / Math.max(1e-6, stack[0])));
+  // A flat face at the head or the tail (y), between two paths (lists of [x, z]) running the same way, joined up
+  // point by point once each is shared out evenly along its length.
+  const between = (m, y, top, bot, shTop, shBot, side) => {
+    const even = (P, N) => {
+      const L = [0]; for (let i = 1; i < P.length; i++) L.push(L[i - 1] + Math.hypot(P[i][0] - P[i - 1][0], P[i][1] - P[i - 1][1]));
+      const tot = L[L.length - 1], out = [];
+      for (let q = 0; q <= N; q++) {
+        if (!(tot > 1e-9)) { out.push(P[0]); continue; }
+        const at = tot * q / N; let i = 1; while (i < P.length - 1 && L[i] < at) i++;
+        const u = (at - L[i - 1]) / Math.max(1e-12, L[i] - L[i - 1]);
+        out.push([P[i - 1][0] + (P[i][0] - P[i - 1][0]) * u, P[i - 1][1] + (P[i][1] - P[i - 1][1]) * u]);
+      }
+      return out;
+    };
+    const N = 40, A = even(top, N), Bp = even(bot, N), b0 = m.pos.length / 3, sgs = side ? 1 : -1;
+    const uvOf = ([x, z]) => [Math.max(0, sgs * x) / Wp * reps, across(side, z)];
+    for (let q = 0; q <= N; q++) { obVert(m, [A[q][0], y, A[q][1]], [0, Math.sign(y), 0], uvOf(A[q]), shTop); obVert(m, [Bp[q][0], y, Bp[q][1]], [0, Math.sign(y), 0], uvOf(Bp[q]), shBot); }
+    for (let q = 0; q < N; q++) { const a = b0 + 2 * q; m.idx.push(a, a + 1, a + 3, a, a + 3, a + 2); }
+  };
+  for (const [side, sg] of [[0, -1], [1, 1]]) {
+    const x0 = xJ[side], zi = base[side];
+    // With no leaves on it, the leaf going over lies down on the board itself; and the endpaper pasted on the board
+    // carries on over the joint to where the leaves begin.
+    if (!stack[side]) {
+      rest[side] = () => zi; lay[side] = u => [Gb[0] + sg * u, zi];
+      if (inside[side] >= 0 && Math.abs(Gb[0] - xB[side]) > 1e-5) add(obHinge(xB[side], Gb[0], zi, side), Object.assign(mat(inside[side]), {repeat:false}));
+      continue;
+    }
+    // (the endpaper over the joint, from the board's edge in to the leaves)
+    if (inside[side] >= 0 && Math.abs(xB[side] - x0) > 1e-5) add(obHinge(xB[side], x0, zi, side), Object.assign(mat(inside[side]), {repeat:false}));
+    // The stack of leaves on it, its top leaf (the page) curving down into the gutter, drawn in to the fold.
+    const top = Math.max(zT[side], zG + 0.0005), g = 0.05 * Wp + 1.2 * (top - zG) + 0.02, us = [];
+    const gw = Math.max(g, 2.5 * Math.abs(Gb[0])), X = u => sg * u + Gb[0] * Math.pow(Math.max(0, 1 - u / gw), 2);
+    for (let i = 0; i <= 28; i++) us.push(g * Math.pow(i / 28, 1.6));
+    for (let i = 1; i <= 6; i++) us.push(g + (Wp - g) * i / 6);
+    // (over the board it stays on the board, going down to the fold only past the board's edge)
+    const zAt0 = u => u >= g ? top : zG + (top - zG) * Math.sqrt(Math.max(0, 1 - Math.pow(1 - u / g, 2)));
+    const zAt = u => sg * (X(u) - x0) > 0 ? Math.max(zAt0(u), zi + 0.0003) : zAt0(u);
+    const slope = u => { const e = 1e-4; return (zAt(Math.min(Wp, u + e)) - zAt(Math.max(0, u - e))) / (2 * e); };
+    const shadeAt = u => 1 - 0.3 * Math.pow(Math.max(0, 1 - u / (g * 1.4)), 2);
+    rest[side] = zAt; shades[side] = shadeAt; lay[side] = u => [X(u), zAt(u)];
+    const page = obNew();
+    for (const u of us) {
+      const z = zAt(u), nn = [-sg * slope(Math.max(u, 1e-3)), 0, 1], tu = side ? u / Wp : 1 - u / Wp;
+      obVert(page, [X(u), Y, z], nn, [tu, 0], shadeAt(u)); obVert(page, [X(u), -Y, z], nn, [tu, 1], shadeAt(u));
+    }
+    for (let i = 0; i < us.length - 1; i++) { const a = 2 * i; page.idx.push(a, a + 1, a + 3, a, a + 3, a + 2); }
+    add(page, {tex:obPage(gl, side ? spec.pR : spec.pL), colour:[1, 1, 1, 1]});
+    // The leaves' edges at the head and the tail: over the board, from the top leaf down to the board; and by the
+    // spine, from the top leaf and the fold down to the back of the leaves (the chord), from this side's board to the fold.
+    const ue = Math.max(0, sg * x0), over = [ue, ...us.filter(u => u > ue)], near = [...us.filter(u => u < ue), ue].reverse();
+    const t0 = side ? 1 - bt * sn / Lc : bt * sn / Lc, backPath = [[x0, zi]];
+    for (let i = 0; i <= 12; i++) backPath.push(chordAt(t0 + (tf - t0) * i / 12));
+    const topPath = [...near.map(u => [X(u), zAt(u)]), Gb];
+    // (each leaf reaches a page's width out from its fold: the bottom one, folded by the board, as far out as the board
+    // lets it, the top one to where the page is shown; the fore-edge slopes between them, as the leaves fan out)
+    const xFb = backPath[1][0] + sg * Wp, xFt = sg * Wp, zF = zz => xFb + (xFt - xFb) * (zz - zi) / Math.max(1e-6, top - zi);
+    const botAt = u => x0 + (xFb - x0) * (u - ue) / Math.max(1e-6, Wp - ue);
+    for (const [y, m] of [[Y, faces.head], [-Y, faces.tail]]) {
+      between(m, y, over.map(u => [u >= Wp ? xFt : X(u), zAt(u)]), over.map(u => [botAt(u), zi]), 0.97, 0.8, side);
+      between(m, y, topPath, backPath, 0.93, 0.8, side);
+    }
+    const fe = faces.fore, fb = fe.pos.length / 3;
+    for (const [yy, zz] of [[Y, zi], [-Y, zi], [-Y, top], [Y, top]]) obVert(fe, [zF(zz), yy, zz], [sg, 0, sg * (xFb - xFt) / Math.max(1e-6, top - zi)], [(0.5 - yy) * reps, across(side, zz)], zz === zi ? 0.8 : 0.97);
+    fe.idx.push(fb, fb + 1, fb + 2, fb, fb + 2, fb + 3);
+  }
+  const edgeMat = i => i >= 0 ? mat(i) : {colour:obColour(look.edges && look.edges.colour, [228, 223, 211])};
+  add(faces.head, edgeMat(iGilt >= 0 ? iGilt : iEdge)); add(faces.tail, edgeMat(iEdge)); add(faces.fore, edgeMat(iEdge));
+  // The height of what lies on top, anywhere across the book (x): found along each side's top leaf as it lies, drawn
+  // in towards the fold as it is, so that a leaf coming down on it, or lifting off it, lies just on it.
+  const tops = lay.map(f => { if (!f) return null; const P = []; for (let i = 0; i <= 80; i++) P.push(f(Wp * Math.pow(i / 80, 1.6))); return P; });
+  const surfAt = x => {
+    const P = tops[x >= Gb[0] ? 1 : 0]; if (!P) return zG;
+    const inc = P[P.length - 1][0] > P[0][0], lo = inc ? P[0] : P[P.length - 1], hi = inc ? P[P.length - 1] : P[0];
+    if (x <= lo[0]) return lo[1]; if (x >= hi[0]) return hi[1];
+    let a = 0, b = P.length - 1;
+    while (b - a > 1) { const m = (a + b) >> 1; if ((P[m][0] < x) === inc) a = m; else b = m; }
+    const q = (x - P[a][0]) / ((P[b][0] - P[a][0]) || 1e-9); return P[a][1] + (P[b][1] - P[a][1]) * q;
+  };
+  return {parts, made, zc:zG, geo:{Wp, Y, zG, gx:Gb[0], rest, shades, lay, surfAt}};
+}
+function obFree(gl){ if (RD.ob && RD.ob.gl === gl) for (const [kind, obj] of RD.ob.made) gl['delete' + kind](obj); RD.ob = null; }
+// A leaf going over in 3D (rdAnimate): {kind:'curl', mode:'anim', anim:{d3:true, ...}, u: how far it's gone, 0 to 1}.
+const obLeafTurn = t => !!t && t.kind === 'curl' && t.mode === 'anim' && !!t.anim && !!t.anim.d3;
+// What lies where: the book open at its spread; or, with a leaf going over, each side as it'll be with the leaf off
+// it (the side it leaves already showing the page under it, the side it goes to still the page it'll cover), and the
+// leaf's two sides (front, the page going over; back, the page on its other side). As the flat book has them.
+function obSpec(t){
+  const k = RD.spread, L = 2 * k, R = 2 * k + 1;
+  if (!obLeafTurn(t)) return {kL:k, kR:k, pL:L, pR:R};
+  const step = t.step || 1, front = t.dir > 0 ? R : L, back = front + t.dir * (2 * step - 1), under = front + 2 * step * t.dir;
+  // How far into the book it lies open, going on from the spread it was open at to the one it'll be open at just
+  // as the leaf goes over (as obLeaf has it go), so that the spine and the leaves on each side move with it,
+  // smoothly, all the way over, rather than at its start and its end.
+  const n = Math.max(1, RD.n), fo = kk => Math.min(1, Math.max(0, 2 * kk / n)), p = ease(Math.min(1, Math.max(0, t.u || 0)));
+  const fc = fo(k) + (fo(k + t.dir * step) - fo(k)) * p;
+  return t.dir > 0 ? {kL:k, kR:k + step, pL:L, pR:under, front, back, fc} : {kL:k - step, kR:k, pL:under, pR:R, front, back, fc};
+}
+/* The leaf going over. It's fixed at the spine and goes over round it, bending as paper does: its outer edge goes
+   ahead as it lifts (as a page taken by its edge does), the part by the spine following, so that in the middle of its
+   way it arches over; and the corner it was taken by (the bottom one, turned by a click or a key, as the flat book
+   has it) goes a little ahead of the other, so it goes over a little on the slant. Wherever it would go into the
+   pages it lies on or comes down on, it lies on them instead: it starts as the top page of the one side, and ends as
+   the top page of the other. Its two sides are drawn separately, each with its own page, each seen only from its
+   own side. Made once for each turn; its shape is worked out afresh for each picture. */
+const OB_NU = 56, OB_NV = 14, OB_LIFT = 0.0025;
+function obLeaf(gl, L, t, sp){
+  const ob = RD.ob, G = ob.geo, sg = t.dir > 0 ? 1 : -1, NU = OB_NU, NV = OB_NV, cols = NU + 1, rows = NV + 1;
+  let lf = ob.leaf;
+  if (!lf || lf.sg !== sg) {
+    const us = [], uvF = [], uvB = [], idxF = [], idxB = [], N = cols * rows;
+    for (let i = 0; i <= NU; i++) us.push(G.Wp * Math.pow(i / NU, 1.5));   // (closer together by the spine, where it bends most)
+    for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) {
+      const a = us[i] / G.Wp, v = j / NV;
+      // (each side's page laid on as it lies on its own side of the book: a right-hand page from the spine outwards)
+      uvF.push(sg > 0 ? a : 1 - a, v); uvB.push(sg > 0 ? 1 - a : a, v);
+    }
+    for (let j = 0; j < NV; j++) for (let i = 0; i < NU; i++) {
+      const a = j * cols + i, b = a + 1, c = a + cols + 1, d = a + cols, A = [a, c, b, a, d, c], B = [a, b, c, a, c, d];
+      idxF.push(...(sg > 0 ? A : B)); idxB.push(...(sg > 0 ? B : A));   // (each wound to face its own way)
+    }
+    lf = ob.leaf = {sg, us, pos:new Float32Array(3 * N), nf:new Float32Array(3 * N), nb:new Float32Array(3 * N), col:new Float32Array(4 * N)};
+    const mk = (target, data, usage) => { const b = gl.createBuffer(); ob.made.push(['Buffer', b]); gl.bindBuffer(target, b); gl.bufferData(target, data, usage); return b; };
+    gl.bindVertexArray(null);
+    lf.bPos = mk(gl.ARRAY_BUFFER, lf.pos, gl.DYNAMIC_DRAW); lf.bCol = mk(gl.ARRAY_BUFFER, lf.col, gl.DYNAMIC_DRAW);
+    lf.bNf = mk(gl.ARRAY_BUFFER, lf.nf, gl.DYNAMIC_DRAW); lf.bNb = mk(gl.ARRAY_BUFFER, lf.nb, gl.DYNAMIC_DRAW);
+    const face = (bn, uv, idx) => {
+      const vao = gl.createVertexArray(); ob.made.push(['VertexArray', vao]); gl.bindVertexArray(vao);
+      for (const [loc, b, size] of [[0, lf.bPos, 3], [1, bn, 3], [2, lf.bCol, 4]]) { gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, size, gl.FLOAT, false, 0, 0); }
+      mk(gl.ARRAY_BUFFER, new Float32Array(uv), gl.STATIC_DRAW); gl.enableVertexAttribArray(3); gl.vertexAttribPointer(3, 2, gl.FLOAT, false, 0, 0);
+      mk(gl.ELEMENT_ARRAY_BUFFER, new Uint32Array(idx), gl.STATIC_DRAW);
+      gl.bindVertexArray(null);
+      return {vao, count:idx.length};
+    };
+    lf.front = face(lf.bNf, uvF, idxF); lf.back = face(lf.bNb, uvB, idxB);
+    // Its shadow: a sheet lying over the pages on both sides (following them down into the gutter), each point as
+    // dark as the leaf above it makes it, laid over them by multiplying.
+    const xs = [], spos = [], sn = [], sc = [], si = [], NS = 36;
+    for (let i = -NS; i <= NS; i++) xs.push(Math.sign(i) * G.Wp * Math.pow(Math.abs(i) / NS, 1.4));
+    const surf0 = G.surfAt;
+    for (let i = 0; i < xs.length; i++) xs[i] += G.gx;
+    for (let j = 0; j < rows; j++) for (const x of xs) { spos.push(x, G.Y - 2 * G.Y * j / NV, surf0(x)); sn.push(0, 0, 1); sc.push(1, 1, 1, 1); }
+    const sw = xs.length;
+    for (let j = 0; j < NV; j++) for (let i = 0; i < sw - 1; i++) { const a = j * sw + i; si.push(a, a + 1, a + sw + 1, a, a + sw + 1, a + sw); }
+    lf.sxs = xs; lf.scol = new Float32Array(sc);
+    const vao = gl.createVertexArray(); ob.made.push(['VertexArray', vao]); gl.bindVertexArray(vao);
+    const at = (loc, data, size, usage) => { const b = mk(gl.ARRAY_BUFFER, data, usage); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, size, gl.FLOAT, false, 0, 0); return b; };
+    at(0, new Float32Array(spos), 3, gl.STATIC_DRAW); at(1, new Float32Array(sn), 3, gl.STATIC_DRAW);
+    lf.bScol = at(2, lf.scol, 4, gl.DYNAMIC_DRAW); at(3, new Float32Array(2 * spos.length / 3), 2, gl.STATIC_DRAW);
+    mk(gl.ELEMENT_ARRAY_BUFFER, new Uint32Array(si), gl.STATIC_DRAW);
+    gl.bindVertexArray(null);
+    lf.shadow = {vao, count:si.length};
+  }
+  // Its shape now. p: how far over it is (easing in and out); the angle it leaves the spine at, and the angle its
+  // outer edge is at (0 lying on the side it started from, pi on the other).
+  const p = ease(Math.min(1, Math.max(0, t.u || 0))), us = lf.us, pos = lf.pos;
+  const aH = Math.PI * Math.pow(p, 1.8), aE = Math.PI * (1 - Math.pow(1 - p, 1.8));
+  const lead = 0.42 * Math.sin(Math.PI * p), cs = t.cy > RD.H / 2 ? -1 : 1;   // (the corner taken: the bottom, or the top)
+  const surf = G.surfAt, sm = (a, b, v) => { const q = Math.min(1, Math.max(0, (v - a) / (b - a))); return q * q * (3 - 2 * q); };
+  // (at its start it's just as its page lay, and at its end just as it'll lie, point for point, so that the print on
+  // it doesn't shift as it lifts off or comes down: the bend worked out below is eased into and out of those)
+  const lay0 = G.lay[sg > 0 ? 1 : 0], lay1 = G.lay[sg > 0 ? 0 : 1], b0 = lay0 ? 1 - sm(0, 0.22, p) : 0, b1 = lay1 ? sm(0.78, 1, p) : 0;
+  for (let j = 0; j < rows; j++) {
+    const y = G.Y - 2 * G.Y * j / NV, e = Math.min(Math.PI, Math.max(0, aE + lead * 0.5 * cs * y / G.Y));
+    let x = 0, z = G.zG;
+    for (let i = 0; i < cols; i++) {
+      if (i) {
+        const ds = us[i] - us[i - 1], a = aH + (e - aH) * Math.pow((us[i] + us[i - 1]) / 2 / G.Wp, 1.2);
+        x += sg * Math.cos(a) * ds; z += Math.sin(a) * ds;
+      }
+      const o = 3 * (j * cols + i);
+      // (drawn in to the fold near the spine, as the pages are, and reaching just as far out as they do)
+      const xx = x + G.gx * Math.pow(Math.max(0, 1 - us[i] / (0.3 * G.Wp)), 2);
+      const lift = OB_LIFT * Math.min(1, us[i] / 0.02);
+      let px = xx, pz = Math.max(z, surf(xx) + lift);
+      if (b0 > 0) { const q = lay0(us[i]); px += (q[0] - px) * b0; pz += (q[1] + lift - pz) * b0; }
+      if (b1 > 0) { const q = lay1(us[i]); px += (q[0] - px) * b1; pz += (q[1] + lift - pz) * b1; }
+      pos[o] = px; pos[o + 1] = y; pos[o + 2] = Math.max(pz, surf(px) + lift);
+    }
+  }
+  // Which way each side faces, from the shape; and its shade, in the gutter as it lies on either side.
+  const P = (i, j) => { const o = 3 * (Math.min(rows - 1, Math.max(0, j)) * cols + Math.min(cols - 1, Math.max(0, i))); return [pos[o], pos[o + 1], pos[o + 2]]; };
+  const r0 = 1 - sm(0, 0.18, p), r1 = sm(0.82, 1, p), shS = G.shades[sg > 0 ? 1 : 0], shE = G.shades[sg > 0 ? 0 : 1];
+  for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) {
+    const a = P(i + 1, j), b = P(i - 1, j), c = P(i, j - 1), d = P(i, j + 1);
+    const du = [a[0] - b[0], a[1] - b[1], a[2] - b[2]], dy = [c[0] - d[0], c[1] - d[1], c[2] - d[2]];
+    let n = [du[1] * dy[2] - du[2] * dy[1], du[2] * dy[0] - du[0] * dy[2], du[0] * dy[1] - du[1] * dy[0]];
+    const l = (Math.hypot(...n) || 1) * sg; n = n.map(v => v / l);
+    const o = 3 * (j * cols + i);
+    for (let q = 0; q < 3; q++) { lf.nf[o + q] = n[q]; lf.nb[o + q] = -n[q]; }
+    const u = us[i], s = Math.pow(Math.max(0.05, 1 - (1 - (shS ? shS(u) : 1)) * r0 - (1 - (shE ? shE(u) : 1)) * r1), 2.2);
+    lf.col.set([s, s, s, 1], 4 * (j * cols + i));
+  }
+  // The shadow it casts on the pages under it and beside it: the light a little from the left, so a leaf standing
+  // up throws its shadow a little to the right; deep where the leaf is close over the page, soft and faint where
+  // it's high above. It comes and goes with the leaf's first and last stretch, so there's no jump as it starts and lands.
+  const fadeS = sm(0, 0.1, p) * (1 - sm(0.9, 1, p)), sx = lf.sxs, sw = sx.length, hs = new Float32Array(cols), xp = new Float32Array(cols);
+  for (let j = 0; j < rows; j++) {
+    for (let i = 0; i < cols; i++) { const o = 3 * (j * cols + i), h = Math.max(0, pos[o + 2] - surf(pos[o])); hs[i] = h; xp[i] = pos[o] + 0.35 * h; }
+    for (let q = 0; q < sw; q++) {
+      let dark = 0;
+      for (let i = 0; i < cols; i++) {
+        const h = hs[i], sg2 = 0.012 + 0.22 * h, d = (sx[q] - xp[i]) / sg2;
+        if (d > -3 && d < 3) { const w = Math.exp(-h / 0.55 - d * d); if (w > dark) dark = w; }
+      }
+      const v = Math.pow(1 - 0.45 * fadeS * dark, 2.2);
+      lf.scol.set([v, v, v, 1], 4 * (j * sw + q));
+    }
+  }
+  for (const [b, data] of [[lf.bPos, pos], [lf.bNf, lf.nf], [lf.bNb, lf.nb], [lf.bCol, lf.col], [lf.bScol, lf.scol]]) { gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferSubData(gl.ARRAY_BUFFER, 0, data); }
+  if (fadeS > 0) {
+    // (laid on the pages, not over the leaf: drawn before it, leaving no depth of its own, pulled just clear of the pages)
+    gl.enable(gl.BLEND); gl.blendFunc(gl.DST_COLOR, gl.ZERO); gl.depthMask(false);
+    gl.enable(gl.POLYGON_OFFSET_FILL); gl.polygonOffset(-2, -8);
+    m3Part(gl, L, {vao:lf.shadow.vao, count:lf.shadow.count, base:[1, 1, 1, 1], cut:0, lit:false, tex:null});
+    gl.disable(gl.POLYGON_OFFSET_FILL); gl.depthMask(true); gl.disable(gl.BLEND);
+  }
+  gl.enable(gl.CULL_FACE); gl.cullFace(gl.BACK); gl.frontFace(gl.CCW);
+  for (const [mesh, pg] of [[lf.front, sp.front], [lf.back, sp.back]]) {
+    const tex = obPage(gl, pg);
+    gl.bindTexture(gl.TEXTURE_2D, tex); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    m3Part(gl, L, {vao:mesh.vao, count:mesh.count, base:[1, 1, 1, 1], cut:0, lit:true, tex});
+  }
+  gl.disable(gl.CULL_FACE);
+}
+// Draws the open book in 3D over the reader, where the flat one would be (and a leaf going over, if one is). False
+// if it can't be.
+function obDraw(){
+  const f = m3Full(); if (!f) return false;
+  const {gl, L} = f, t = RD.turn, sp = obSpec(t);
+  const key = [sp.kL, sp.kR, sp.pL, sp.pR, t && obLeafTurn(t) ? t.dir + ':' + (t.step || 1) : '', sp.fc === undefined ? '' : sp.fc.toFixed(5), RD.n, RD.W, RD.H, RD.dpr, RD.look && RD.look.headband,
+    [sp.pL, sp.pR].map(p => { const e = RD.cache.get(p); return e ? e.pgen + ':' + e.canvas.width : '-'; }).join()].join('|');
+  if (!RD.ob || RD.ob.gl !== gl || RD.ob.key !== key) { obFree(gl); RD.ob = Object.assign(obBuild(gl, sp), {gl, key}); }
+  for (const p of [sp.pL, sp.pR]) obPage(gl, p);   // (the pages lying open kept as used)
+  const st = $('readerStage').getBoundingClientRect();
+  const x = st.left + RD.ox + RD.shift + RD.W, y = st.top + RD.oy + RD.H / 2;
+  // Face on, as the model is drawn as a cover swings (so the one follows on from the other), from as far off (in
+  // pages' heights rather than the model's units), and held as RV has it: turned about the gutter.
+  const dist = RD3_FAR / (2 * RD.b3.py1), proj = m3Aim(x + RV.panX, y + RV.panY, RD.H * RV.zoom, dist, f.SW, f.SH, Math.max(0.05, dist - 3), dist + 3);
+  const view = rvView(dist, [0, 0, 0], m4.trs([0, 0, -RD.ob.zc]));
+  gl.uniformMatrix4fv(L.uProj, false, proj);
+  gl.uniformMatrix4fv(L.uView, false, view);
+  RD.obPV = {pv:m4.mul(proj, view), SW:f.SW, SH:f.SH};
+  gl.uniform1f(L.uBright, M3_REST_BRIGHT); gl.uniform1i(L.uSwing, 0);
+  for (const p of RD.ob.parts) {
+    if (p.tex) { gl.bindTexture(gl.TEXTURE_2D, p.tex); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, p.repeat ? gl.REPEAT : gl.CLAMP_TO_EDGE); }
+    m3Part(gl, L, {vao:p.mesh.vao, count:p.mesh.count, base:p.base || (p.tex ? [1, 1, 1, 1] : p.colour), cut:p.cut || 0, lit:p.lit !== false, tex:p.tex || null});
+  }
+  if (obLeafTurn(t)) obLeaf(gl, L, t, sp);
+  gl.bindVertexArray(null); gl.uniform1f(L.uBright, 0);
+  const cx = f.cv.getContext('2d'); cx.setTransform(1, 0, 0, 1, 0, 0); cx.clearRect(0, 0, f.W, f.H); cx.drawImage(f.g, 0, 0);
+  const cv = $('readerFlight');
+  clearTimeout(RD.v3Timer); cv.hidden = false; cv.classList.remove('landing', 'entering'); RD.v3 = true;
+  return true;
 }
 function readerSay(text){ const n = $('readerNote'); n.textContent = text || ''; n.hidden = !text; }
 const readerKey = name => 'journal-reader:' + name;
+/* The book's pages. A PDF read on its own is its pages, 1 to RD.n. Made into a book with a model, the PDF's first
+   page (its cover, the model being the cover now) is left out; and with the model's endpapers, the book begins with
+   the free endpaper (a leaf of the endpaper, its decorated side facing the one pasted inside the board, its back
+   plain) and ends with another, the last facing the back board (with a blank page before it, if the PDF's pages
+   would leave it on the wrong side). What page p of the book is: {pdf: the PDF's page}, {end:true} the endpaper's
+   decorated side, or {blank:true}. */
+function rdSrc(p){
+  if (!RD.ends) return {pdf:p + RD.skip};
+  if (p === 1 || p === RD.n) return {end:true};
+  const q = p - 2;
+  return q >= 1 && q <= RD.pdfN ? {pdf:q + RD.skip} : {blank:true};
+}
+function rdSetPages(numPages){
+  RD.skip = RD.model && numPages > 1 ? 1 : 0; RD.pdfN = numPages - RD.skip;
+  RD.ends = !!(RD.look && RD.look.endsheet);
+  if (!RD.ends) { RD.n = RD.pdfN; return; }
+  let a = 2 + RD.pdfN;
+  if ((a + 1) % 2 === 0) a++;   // the last leaf starts on a right-hand page
+  RD.n = a + 2;
+}
+const rdReady = p => !rdSrc(p).pdf || RD.cache.has(p);
+// The page of the book (p) that shows the PDF's page q (as the PDF numbers it), or the nearest there is.
+function rdOfPdf(q){
+  const k = Math.max(RD.skip + 1, Math.min(RD.skip + RD.pdfN, q)) - RD.skip;
+  return RD.ends ? k + 2 : k;
+}
 const lastSpread = () => Math.floor(RD.n / 2);
 const firstState = () => RD.look ? -1 : 0, lastState = () => RD.look ? lastSpread() + 1 : lastSpread();
 async function openReader(name, title, model, lift){
   closeReaderDoc();
   const gen = ++RD.gen;
-  RD.open = true; RD.name = name; RD.model = model || null;
+  const gone = () => gen !== RD.gen || FL.leaving;   // closed, or on its way back (it's set up no further)
+  RD.open = true; RD.name = name; RD.model = model || null; rvReset();
   $('readerTitle').textContent = cleanTitle(title) || 'Untitled PDF';
   $('readerPages').textContent = ''; $('readerGo').value = ''; $('readerGo').disabled = true;
   for (const d of document.querySelectorAll('dialog[open]')) if (d !== $('bookReader')) d.close();
+  // One of the journal's book models is read in the model itself (rd3Draw), with pages the shape of its page block.
+  const mm = model && M3.cache.get(model);
+  RD.b3 = mm && mm.data ? bookDims(mm.data) : null;
+  if (RD.b3) RD.aspect = RD.b3.aspect;
   if (lift) $('bookReader').classList.add('flying');   // before it shows: the room darkens as the book comes, the reader waits under it
   if (!$('bookReader').open) $('bookReader').showModal();
+  readerLayout();
   if (lift) flyBook(lift);
-  readerLayout(); drawReader();
+  drawReader();
   try {
-    readerSay(pdfjsLib ? 'Opening the book\u2026' : 'Getting the page reader ready (the first time, this downloads it)\u2026');
+    // (only if that's slow: the first time, it's downloaded)
+    readerSay('');
+    if (!pdfjsLib) setTimeout(() => { if (gen === RD.gen && !pdfjsLib) readerSay('Getting the page reader ready (the first time, this downloads it)\u2026'); }, 800);
     const look = model ? loadBookLook(model).catch(() => null) : Promise.resolve(null);
     const lib = await loadPdfjs();
-    if (gen !== RD.gen) return;
-    readerSay('Opening the book\u2026');
+    if (gone()) return;
+    readerSay('');
     const task = lib.getDocument({url:pdfSrc(name), cMapUrl:'/pdfjs/cmaps/', cMapPacked:true,
       standardFontDataUrl:'/pdfjs/standard_fonts/', wasmUrl:'/pdfjs/wasm/', iccUrl:'/pdfjs/iccs/'});
     RD.task = task;
     const doc = await task.promise;
-    if (gen !== RD.gen) return;
+    if (gone()) return;
     const vp = (await doc.getPage(1)).getViewport({scale:1});
     RD.look = await look;
-    if (gen !== RD.gen) return;
-    RD.doc = doc; RD.n = doc.numPages;
+    if (!RD.b3 && RD.look) { const m3 = await loadModel(model).catch(() => null); RD.b3 = m3 && m3.data ? bookDims(m3.data) : null; }
+    if (!RD.look) RD.b3 = null;
+    obShowButton();
+    if (gone()) return;
+    RD.doc = doc; rdSetPages(doc.numPages);
     // In a book, the pages take the book's shape; on their own, the first page's.
-    RD.aspect = Math.min(2, Math.max(0.25, RD.look ? RD.look.aspect : vp.width / vp.height));
+    RD.aspect = Math.min(2, Math.max(0.25, RD.b3 ? RD.b3.aspect : RD.look ? RD.look.aspect : vp.width / vp.height));
     let saved = 0; try { saved = parseInt(localStorage.getItem(readerKey(name)), 10) || 0; } catch (e) {}
     saved = Math.min(lastSpread(), Math.max(0, saved));
     readerSay('');
-    $('readerGo').disabled = false; $('readerGo').max = RD.n;
+    $('readerGo').disabled = false; $('readerGo').min = RD.skip + 1; $('readerGo').max = RD.skip + RD.pdfN;
     if (RD.look) {
-      // Closed at first; once the pages it opens at are drawn (or after a moment), the cover swings open.
-      RD.spread = -1; RD.target = saved;
+      // Closed at first; once the pages it opens at are drawn (or after a moment), the cover swings open, at the
+      // start, and then it's leafed through to where it was left (the pages it stops at on the way drawn first).
+      const calm = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+      const path = calm ? [] : rdFlickPath(saved), first = path.length ? 0 : saved;
+      RD.spread = -1; RD.target = first;
+      for (const j of [first, ...path]) RD.keep.add(2 * j).add(2 * j + 1);
       RD.W = 0; readerLayout(); readerPagesText(); drawReader();
-      const at = [2 * saved, 2 * saved + 1].filter(p => p >= 1 && p <= RD.n), t0 = performance.now();
-      while (gen === RD.gen && performance.now() - t0 < 1500 && !at.every(p => RD.cache.has(p))) await new Promise(r => setTimeout(r, 60));
+      RD.opening = true;
+      if (FL.active && FL.arrived) await FL.arrived;   // (its pages are drawn once it's there, keeping still)
+      const at = [2 * first, 2 * first + 1].filter(p => p >= 1 && p <= RD.n), t0 = performance.now();
+      while (gen === RD.gen && performance.now() - t0 < 1500 && !at.every(rdReady)) await new Promise(r => setTimeout(r, 60));
       await flyLand(gen);
       await new Promise(r => setTimeout(r, 250));
-      if (gen === RD.gen && RD.spread === -1 && !RD.turn) rdRigid(-1, saved, 'turn');
+      if (gen === RD.gen && RD.spread === -1 && !RD.turn && !FL.leaving && !FL.active) {
+        await rdStill();
+        rdRigid(-1, first, 'turn');
+        while (gen === RD.gen && RD.turn && RD.turn.kind === 'rigid') await new Promise(r => setTimeout(r, 30));
+        if (gen === RD.gen && RD.spread === first) await rdFlick(path, gen);
+      }
+      if (gen === RD.gen) { RD.keep.clear(); RD.opening = RD.hold = false; readerWant(); }
     } else {
       RD.spread = saved;
       RD.W = 0; readerLayout(); readerPagesText(); drawReader();
@@ -10048,7 +11445,7 @@ async function openReader(name, title, model, lift){
     }
     rdCanvas.focus();
   } catch (err) {
-    if (gen !== RD.gen) return;
+    if (gone()) return;
     flyLand(gen);
     readerSay(err && err.message === 'pdfjs'
       ? "Couldn't get the page reader (pdf.js). It's downloaded once from the internet into journal/pdfjs: check the connection and try again."
@@ -10057,23 +11454,36 @@ async function openReader(name, title, model, lift){
 }
 function closeReaderDoc(){
   flyStop();
+  RD.b3 = null; RD.v3 = false; clearTimeout(RD.v3Timer);
   RD.gen++; RD.pgen++;
-  if (RD.task) RD.task.destroy().catch(() => {});
-  RD.task = RD.doc = RD.look = RD.model = RD.target = null; RD.n = 0; RD.cache.clear(); RD.queue = []; RD.turn = null; RD.open = false;
+  // (one still loading is let go of once it's loaded: stopped halfway, pdf.js complains)
+  if (RD.task) { const task = RD.task, end = () => task.destroy().catch(() => {}); if (RD.doc) end(); else task.promise.then(end, end); }
+  RD.task = RD.doc = RD.look = RD.model = RD.target = null; RD.n = RD.skip = RD.pdfN = 0; RD.ends = false; RD.cache.clear(); RD.keep.clear(); RD.opening = RD.hold = false; RD.next = []; RD.queue = []; RD.turn = null; RD.open = false;
   if (RD.raf) { cancelAnimationFrame(RD.raf); RD.raf = 0; }
 }
 // The book as large as fits, and the canvas at the screen's own sharpness.
-const rdMargin = () => Math.max(8, RD.H * 0.024);   // how far the boards reach past the pages
+// How far the boards reach past the pages: as far as the model's do, for one of the journal's book models.
+const rdMargin = () => RD.b3 ? RD.H * RD.b3.sq : Math.max(8, RD.H * 0.024);
 // How tall a page is, for a book of pages this shape lying open (two pages across) on a stage this size.
 const readerFit = (sw, sh, aspect) => { const pad = Math.max(28, Math.min(sw, sh) * 0.05); return Math.max(40, Math.min(sh - 2 * pad, (sw - 2 * pad) / (2 * aspect))); };
 function readerLayout(){
-  const st = $('readerStage'), sw = st.clientWidth, sh = st.clientHeight, dpr = window.devicePixelRatio || 1;
+  const st = $('readerStage'), r = st.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+  const sw = r.width, sh = r.height;
   if (!sw || !sh) return;
-  const cw = Math.round(sw * dpr), ch = Math.round(sh * dpr);
+  // The canvas exactly as many of the screen's pixels as it has of its own, lying on whole ones: stretched by even
+  // a fraction of a pixel (the stage being a fraction of a pixel wide, or starting part-way into one), the whole
+  // book would be blurred a little as it's shown.
+  const cw = Math.floor(sw * dpr), ch = Math.floor(sh * dpr);
   if (rdCanvas.width !== cw || rdCanvas.height !== ch) { rdCanvas.width = cw; rdCanvas.height = ch; }
+  rdCanvas.style.width = cw / dpr + 'px'; rdCanvas.style.height = ch / dpr + 'px';
+  const fx = r.left * dpr - Math.round(r.left * dpr), fy = r.top * dpr - Math.round(r.top * dpr);
+  rdCanvas.style.transform = fx || fy ? `translate(${-fx / dpr}px,${-fy / dpr}px)` : '';
   const H = readerFit(sw, sh, RD.aspect), W = H * RD.aspect;
-  const changed = Math.abs(W - RD.W) > 1 || dpr !== RD.dpr;
-  RD.W = W; RD.H = H; RD.dpr = dpr; RD.ox = (sw - 2 * W) / 2; RD.oy = (sh - H) / 2;
+  const changed = Math.abs(W - RD.W) > 0.5 / dpr || Math.abs(H - RD.H) > 0.5 / dpr || dpr !== RD.dpr;   // (a page drawn for a size even a pixel off would have to be stretched)
+  RD.W = W; RD.H = H; RD.dpr = dpr; RD.oy = Math.round((sh - H) / 2 * dpr) / dpr;
+  // The spine on a line between two of the screen's pixels: there the two pages meet exactly, with no pixel half of
+  // one and half of the other (which shows as a pale thread down the middle).
+  RD.ox = Math.round(sw / 2 * dpr) / dpr - W;
   if (changed) {
     if (RD.turn) { const t = RD.turn; RD.turn = null; if (t.mode === 'anim' && t.anim.done === 'turn') rdFinish(t); }
     RD.faceA = RD.faceB = null;
@@ -10083,14 +11493,15 @@ function readerLayout(){
 new ResizeObserver(() => { if (RD.open) { readerLayout(); drawReader(); } }).observe($('readerStage'));
 function readerPagesText(){
   const k = RD.spread;
+  const all = RD.skip + RD.pdfN;   // pages are numbered as the PDF numbers them
   if (RD.look && (k < 0 || k > lastSpread())) {
-    $('readerPages').textContent = (k < 0 ? 'Closed' : 'Closed at the back') + ' (' + RD.n + ' pages)';
+    $('readerPages').textContent = (k < 0 ? 'Closed' : 'Closed at the back') + ' (' + all + ' pages)';
     if (document.activeElement !== $('readerGo')) $('readerGo').value = '';
     return;
   }
-  const shown = [2 * k, 2 * k + 1].filter(p => p >= 1 && p <= RD.n);
-  $('readerPages').textContent = !shown.length ? '' : shown.length === 1 ? 'Page ' + shown[0] + ' of ' + RD.n
-    : 'Pages ' + shown[0] + '\u2013' + shown[1] + ' of ' + RD.n;
+  const at = [2 * k, 2 * k + 1].filter(p => p >= 1 && p <= RD.n).map(rdSrc), shown = at.filter(s => s.pdf).map(s => s.pdf);
+  $('readerPages').textContent = shown.length === 1 ? 'Page ' + shown[0] + ' of ' + all
+    : shown.length ? 'Pages ' + shown[0] + '\u2013' + shown[1] + ' of ' + all : at.some(s => s.end) ? 'Endpapers' : '';
   if (document.activeElement !== $('readerGo')) $('readerGo').value = shown[0] || '';
 }
 function rdGoTo(k){
@@ -10101,7 +11512,7 @@ function rdGoTo(k){
 function rdJump(page){
   if (!RD.doc) return;
   RD.turn = null;
-  rdGoTo(Math.floor(Math.max(1, Math.min(RD.n, page)) / 2));
+  rdGoTo(Math.floor(rdOfPdf(page) / 2));
   drawReader();
 }
 
@@ -10109,9 +11520,10 @@ function rdJump(page){
 function readerWant(){
   if (!RD.doc) return;
   const k = Math.max(0, Math.min(lastSpread(), RD.target !== null ? RD.target : RD.spread)), at = 2 * k + 1;
-  RD.queue = [at, at - 1, at + 1, at + 2, at - 2, at - 3, at + 3, at + 4, at - 4, at - 5]
-    .filter(p => p >= 1 && p <= RD.n && (RD.cache.get(p) || {}).pgen !== RD.pgen);
-  for (const p of [...RD.cache.keys()]) if (Math.abs(p - at) > 12) RD.cache.delete(p);
+  // (and, after the open ones, those it's about to be leafed through to: RD.keep)
+  const want = p => p >= 1 && p <= RD.n && rdSrc(p).pdf && (RD.cache.get(p) || {}).pgen !== RD.pgen;
+  RD.queue = [...new Set([at, at - 1, ...RD.keep, at + 1, at + 2, at - 2, at - 3, at + 3, at + 4, at - 4, at - 5])].filter(want);
+  for (const p of [...RD.cache.keys()]) if (Math.abs(p - at) > 12 && !RD.keep.has(p)) RD.cache.delete(p);
   readerPump();
 }
 async function readerPump(){
@@ -10121,16 +11533,35 @@ async function readerPump(){
     while (RD.doc && RD.queue.length) {
       const p = RD.queue.shift();
       if ((RD.cache.get(p) || {}).pgen === RD.pgen) continue;
+      // Not while anything's moving (drawing a page holds everything else up, and it would stutter): not while the
+      // book is on its way up, nor, as it opens, while its cover or a leaf goes over (RD.hold), but between them;
+      // and as it opens, only the pages it opens at and is leafed through to (the rest come after).
+      if (RD.opening && !RD.keep.has(p)) continue;
+      while (RD.doc && ((FL.active && !FL.landed && !FL.leaving && FL.t < 1) || FL.leaving || RD.hold || (RD.opening && RD.turn && RD.turn.mode === 'anim')))
+        await new Promise(r => setTimeout(r, 30));
+      if (!RD.doc) break;   // (closed meanwhile)
+      RD.drawing = true;
       try { await readerRender(p); } catch (err) { /* a page that can't be drawn stays blank */ }
+      finally { RD.drawing = false; }
     }
   } finally { RD.busy = false; }
 }
 async function readerRender(p){
   const doc = RD.doc, pgen = RD.pgen;
-  const page = await doc.getPage(p), vp1 = page.getViewport({scale:1});
-  const fit = Math.min(RD.W / vp1.width, RD.H / vp1.height), vp = page.getViewport({scale:fit * RD.dpr});
-  const c = document.createElement('canvas'); c.width = Math.max(1, Math.ceil(vp.width)); c.height = Math.max(1, Math.ceil(vp.height));
-  await page.render({canvas:c, canvasContext:c.getContext('2d'), viewport:vp, background:READER_PAPER}).promise;
+  const page = await doc.getPage(rdSrc(p).pdf), vp1 = page.getViewport({scale:1});
+  // Drawn at exactly the size, in the screen's own pixels, that it's shown at when the book lies open at it: as wide
+  // as its place is once the page edges beside it have taken their share (rdSlotAt), and as tall as it is. Shown
+  // like that, it's copied onto the screen pixel for pixel, and the writing stays as sharp as pdf.js drew it; drawn
+  // at any other size, it would have to be stretched to fit, and every letter would be softened.
+  const fit = Math.min(RD.W / vp1.width, RD.H / vp1.height);
+  const inn = rdEdgeSplit(p % 2 === 0, Math.floor(p / 2)).inn, sx = (RD.W - inn) / RD.W;
+  const cw = Math.max(1, Math.round(vp1.width * fit * sx * RD.dpr)), ch = Math.max(1, Math.round(vp1.height * fit * RD.dpr));
+  const ky = ch / vp1.height, vp = page.getViewport({scale:ky});
+  const c = document.createElement('canvas'); c.width = cw; c.height = ch;
+  const paper = RD.look && RD.look.paper;
+  const task = RD.drawTask = page.render({canvas:c, canvasContext:c.getContext('2d'), viewport:vp,
+    transform:[cw / (vp1.width * ky), 0, 0, 1, 0, 0], background:paper ? '#FFFFFF' : READER_PAPER});
+  try { await task.promise; } finally { if (RD.drawTask === task) RD.drawTask = null; }
   page.cleanup();
   if (doc !== RD.doc) return;
   if (pgen === RD.pgen || !RD.cache.has(p)) RD.cache.set(p, {canvas:c, ratio:vp1.width / vp1.height, pgen});
@@ -10148,66 +11579,260 @@ function clipPoly(poly, f){
   }
   return out;
 }
+// The paper the pages are printed on: the book's own (its model's Paper), or the reader's plain paper.
+function rdPaper(c, x, y, w, h){
+  const p = RD.look && RD.look.paper;
+  if (p && p.img) c.drawImage(p.img, x, y, w, h);
+  else { c.fillStyle = p && p.colour || READER_PAPER; c.fillRect(x, y, w, h); }
+}
 // A picture or a colour from the book, filling a rectangle.
 function rdFill(c, m, x, y, w, h, fallback){
   if (m && m.img) c.drawImage(m.img, x, y, w, h);
   else { c.fillStyle = m && m.colour || fallback; c.fillRect(x, y, w, h); }
 }
-// One page, laid flat with its left edge at x (0 for the left page, W for the right).
-function rdPage(c, p, x){
+// The shade of a page curving down into the spine, from the spine (0) out to where it lies flat (1): a warm dark,
+// as much of it as darkens the paper to those shades. (Laid on as it is, not multiplied in: some browsers, drawing on
+// the graphics card, would now and then leave out the last shade multiplied in, so that one page or the other lost its
+// shadow once the book lay still, and got it back as soon as anything moved.)
+const RD_GUTTER = [[0, 132], [.03, 166], [.08, 192], [.18, 214], [.32, 231], [.5, 243], [.75, 251], [1, 255]]
+  .map(([at, v]) => [at, 'rgba(30,22,14,' + Math.min(1, (1 - v / 255) * 1.13).toFixed(3) + ')']);
+// The outline of a page lying open, its left edge at x (0 for the left page, W for the right). Curving down into
+// the spine, the page sinks away from you there, and so looks a little shorter: its top and bottom edges dip in
+// towards the middle over the last stretch before the spine (showing the hollow of the spine behind, above and
+// below it).
+function rdPageShape(c, x){
+  const W = RD.W, H = RD.H, left = x === 0, gw = W * 0.14, dip = Math.min(H * 0.007, gw * 0.12), sx = left ? -1 : 1;
+  c.beginPath();
+  c.moveTo(left ? 0 : 2 * W, 0); c.lineTo(W + sx * gw, 0); c.quadraticCurveTo(W + sx * gw / 2, 0, W, dip);
+  c.lineTo(W, H - dip); c.quadraticCurveTo(W + sx * gw / 2, H, W + sx * gw, H); c.lineTo(left ? 0 : 2 * W, H);
+  c.closePath();
+}
+// Where the page curves down into the spine, it turns away from the light: a little darker at first, then quickly
+// deeper, to a dark crease where the two pages meet. (strength: how much of it, 0 to 1)
+function rdGutter(c, x, strength){
+  if (strength !== undefined && strength <= 0) return;
+  const W = RD.W, H = RD.H, left = x === 0, gw = W * 0.14;
+  c.save();
+  if (strength !== undefined) c.globalAlpha = Math.min(1, strength);
+  const g = c.createLinearGradient(W, 0, left ? W - gw : W + gw, 0);
+  for (const [at, col] of RD_GUTTER) g.addColorStop(at, col);
+  c.fillStyle = g; c.fillRect(left ? W - gw : W, 0, gw, H);
+  c.restore();
+}
+// One page, laid flat with its left edge at x (0 for the left page, W for the right); with shade (0 to 1) as much of
+// the shade of the spine as it's in (all of it, lying flat; none, or true, for a leaf that's lifted).
+function rdPage(c, p, x, shade){
   const W = RD.W, H = RD.H;
-  c.fillStyle = READER_PAPER; c.fillRect(x, 0, W, H);
-  const e = RD.cache.get(p);
+  const src = rdSrc(p), e = src.pdf && RD.cache.get(p);
+  c.save();
+  rdPageShape(c, x); c.clip();
+  if (src.end) rdFill(c, RD.look.endsheet, x, 0, W, H, READER_PAPER);   // the endpaper's decorated side
+  else rdPaper(c, x, 0, W, H);
   if (e) {
     let w = W, h = W / e.ratio;
     if (h > H) { h = H; w = H * e.ratio; }
-    c.drawImage(e.canvas, x + (W - w) / 2, (H - h) / 2, w, h);
-  } else {
-    c.fillStyle = 'rgba(30,39,35,.3)'; c.font = 'italic ' + Math.round(Math.max(11, H * 0.028)) + 'px Spectral, Georgia, serif';
-    c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(String(p), x + W / 2, H / 2);
-  }
-  // Where the page curves down into the spine, it's in shadow.
-  const gw = W * 0.12, g = c.createLinearGradient(W, 0, x === 0 ? W - gw : W + gw, 0);
-  g.addColorStop(0, 'rgba(0,0,0,.2)'); g.addColorStop(.3, 'rgba(0,0,0,.06)'); g.addColorStop(1, 'rgba(0,0,0,0)');
-  c.fillStyle = g; c.fillRect(x, 0, W, H);
-}
-const rdSlot = (c, p, x) => { if (p >= 1 && p <= RD.n) rdPage(c, p, x); };
-// How thick the edges of the pages on one side look: in a book, its thickness shared out by pages.
-function rdStack(count){
-  if (!count) return 0;
-  if (RD.look) return Math.max(1.5, Math.min(RD.W * 0.07, RD.look.thick * RD.H * 0.35) * count / Math.max(1, RD.n));
-  return Math.min(RD.W * 0.035, 1.5 + count * 0.045);
-}
-// One half of the open book at spread k: its board (the inside of the board, in a book), the edges of its
-// pages, and (with page) its page.
-function rdHalf(c, side, k, page){
-  const W = RD.W, H = RD.H, b = rdMargin(), left = side === 'L';
-  const t = rdStack(left ? 2 * k : Math.max(0, RD.n - 2 * k));
-  const x = left ? -t - b : W, w = W + t + b, look = RD.look;
-  c.save();
-  c.beginPath(); c.roundRect(x, -b, w, H + 2 * b, left ? [b * 0.5, 0, 0, b * 0.5] : [0, b * 0.5, b * 0.5, 0]); c.clip();
-  rdFill(c, look && (left ? look.insideL : look.insideR), x, -b, w, H + 2 * b, READER_BOARD);
-  if (look) { c.lineWidth = 3; c.strokeStyle = look.board && look.board.colour || 'rgba(0,0,0,.4)'; c.stroke(); }   // the board's edge
-  const sg = c.createLinearGradient(W, 0, left ? W - b * 2.2 : W + b * 2.2, 0);   // the hollow of the spine
-  sg.addColorStop(0, 'rgba(0,0,0,.42)'); sg.addColorStop(1, 'rgba(0,0,0,0)');
-  c.fillStyle = sg; c.fillRect(x, -b, w, H + 2 * b);
-  c.restore();
-  if (t) {
-    const ex = left ? -t : 2 * W, edges = look && look.edges;
-    if (edges && edges.img) {
-      const im = edges.img;
-      if (im.width > im.height) { c.save(); c.translate(ex + t, 0); c.rotate(Math.PI / 2); c.drawImage(im, 0, 0, H, t); c.restore(); }
-      else c.drawImage(im, ex, 0, t, H);
+    // On the book's own paper, the page is laid over it so that its white takes on the paper and its print stays
+    // as dark as it is (it's drawn on white for that).
+    const paper = RD.look && RD.look.paper;
+    c.save();
+    if (paper) c.globalCompositeOperation = 'multiply';
+    const dx = x + (W - w) / 2, dy = (H - h) / 2, m = c.getTransform(), cv = e.canvas;
+    // Lying flat where it'll be shown at the size it was drawn at: put down pixel for pixel, on the screen's own
+    // pixels. Otherwise (a leaf on its way over, or a page drawn for another size, while it's drawn again) it's
+    // scaled as finely as the browser can.
+    // (Near enough: turned by less than a third of a pixel from end to end, as a leaf is just as it lands.)
+    if (Math.abs(m.b) * w < 0.35 && Math.abs(m.c) * h < 0.35 && Math.abs(m.a * w - cv.width) < 1 && Math.abs(m.d * h - cv.height) < 1 && m.a > 0 && m.d > 0) {
+      c.setTransform(1, 0, 0, 1, 0, 0);
+      c.drawImage(cv, Math.floor(m.a * dx + m.e + 0.501), Math.floor(m.d * dy + m.f + 0.501));   // (half a pixel always the same way, whatever the rounding in the sums)
     } else {
-      c.fillStyle = edges && edges.colour || READER_EDGE; c.fillRect(ex, 0, t, H);
-      c.fillStyle = 'rgba(0,0,0,.09)';
-      for (let i = ex + 1; i < ex + t; i += 2) c.fillRect(i, 0, 0.6, H);
+      c.imageSmoothingQuality = 'high';
+      c.drawImage(cv, dx, dy, w, h);
     }
-    const sh = c.createLinearGradient(left ? 0 : 2 * W, 0, left ? -t : 2 * W + t, 0);   // falling away from the page on top
-    sh.addColorStop(0, 'rgba(0,0,0,.18)'); sh.addColorStop(1, 'rgba(0,0,0,0)');
-    c.fillStyle = sh; c.fillRect(ex, 0, t, H);
+    c.restore();
+  } else if (src.pdf) {   // not drawn yet
+    c.fillStyle = 'rgba(30,39,35,.3)'; c.font = 'italic ' + Math.round(Math.max(11, H * 0.028)) + 'px Spectral, Georgia, serif';
+    c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(String(src.pdf), x + W / 2, H / 2);
   }
+  if (shade === undefined) rdGutter(c, x); else if (shade !== true) rdGutter(c, x, shade);
+  c.restore();
+}
+// Page p in its place, on the left (x 0) or the right (x RD.W) of the book open at spread k: narrower by the page
+// edges showing where its outer edge would be (rdEdgeSplit), drawn in towards the spine.
+function rdSlotAt(c, p, x, k, shade){
+  if (p < 1 || p > RD.n) return;
+  const W = RD.W, inn = rdEdgeSplit(x === 0, k).inn;
+  if (!inn) { rdPage(c, p, x, shade); return; }
+  c.save(); c.translate(W, 0); c.scale((W - inn) / W, 1); c.translate(-W, 0); rdPage(c, p, x, shade); c.restore();
+}
+const rdSlot = (c, p, x) => rdSlotAt(c, p, x, RD.spread);
+// How thick the edges of the pages on one side look: in a book, its thickness shared out by pages.
+/* The edges of the pages on one side of the book open at spread k, seen beside the pages: count pages' worth. How
+   much of them shows depends on where in the book it's open: most in the middle, where the pages fan up from the
+   spine on both sides, and barely any at the start and the end, where they lie flat. The board is always the same
+   size and always reaches past them: they lie first in its margin (out of them), and the rest (inn) where the top
+   page's outer edge would be, that page being drawn that much narrower, as it looks curving up from the spine. */
+function rdStack(count, k){
+  if (!count || !RD.n) return 0;
+  // As thick as that many leaves are (a leaf of paper is about a two-thousandth of the page's height; count pages are
+  // half as many leaves), up to as much as the book can show.
+  const f = Math.min(1, Math.max(0, 2 * k / RD.n)), most = RD.W * (RD.look ? Math.min(0.08, 0.02 + RD.look.thick * 0.3) : 0.035);
+  return Math.max(1, Math.min(most, count / 2 * RD.H * 0.00045) * Math.sin(Math.PI * f));
+}
+function rdEdgeSplit(left, k){
+  const t = rdStack(rdCount(left, k), k), out = Math.min(t, rdMargin() * 0.8);
+  return {t, out, inn:t - out};
+}
+// The page edges, t wide, beside a page whose outer edge is at x0 (outwards to the left, for the left page).
+function rdEdges(c, x0, t, left){
+  const H = RD.H, ex = left ? x0 - t : x0, edges = RD.look && RD.look.edges;
+  if (edges && edges.img) {
+    const im = edges.img;
+    if (im.width > im.height) { c.save(); c.translate(ex + t, 0); c.rotate(Math.PI / 2); c.drawImage(im, 0, 0, H, t); c.restore(); }
+    else c.drawImage(im, ex, 0, t, H);
+  } else {
+    c.fillStyle = edges && edges.colour || READER_EDGE; c.fillRect(ex, 0, t, H);
+    c.fillStyle = 'rgba(0,0,0,.09)';
+    for (let i = ex + 1; i < ex + t; i += 2) c.fillRect(i, 0, 0.6, H);
+  }
+  const sh = c.createLinearGradient(x0, 0, left ? x0 - t : x0 + t, 0);   // falling away from the page on top
+  sh.addColorStop(0, 'rgba(0,0,0,.18)'); sh.addColorStop(1, 'rgba(0,0,0,0)');
+  c.fillStyle = sh; c.fillRect(ex, 0, t, H);
+}
+// How many pages lie on each side of the book open at spread k.
+const rdCount = (left, k) => left ? 2 * k : Math.max(0, RD.n - 2 * k);
+// One half of the open book at spread k: its board (the inside of the board, in a book), the edges of its
+// pages (count pages' worth, if not all that lie on that side), and (with page) its page. The board of one of the journal's book models is drawn just as the model
+// shows it (rd3Draw), so the one can take over from the other unseen.
+function rdHalf(c, side, k, page, count){
+  const W = RD.W, H = RD.H, b = rdMargin(), left = side === 'L', look = RD.look, model = !!RD.b3;
+  const e = count === 0 ? {t:0, out:0, inn:0} : rdEdgeSplit(left, k), x = left ? -b : W, w = W + b;
+  c.save();
+  rdBoardPath(c, left); c.clip();
+  const inside = look && (left ? look.insideL : look.insideR);
+  rdFill(c, inside, x, -b, w, H + 2 * b, READER_BOARD);
+  // The endpaper pasted down on it dips into the spine just as the pages do: where the pages' corners dip, the
+  // covering shows above it (the picture's line just above the pages' edge, carried down), not the endpaper.
+  if (model && inside && inside.img) {
+    const im = inside.img, gw = W * 0.14, dip = Math.min(H * 0.007, gw * 0.12), sx = left ? -1 : 1, ry = im.height / (H + 2 * b);
+    for (const top of [true, false]) {
+      c.save();
+      if (!top) { c.translate(0, H); c.scale(1, -1); }
+      c.beginPath(); c.moveTo(W + sx * gw, 0); c.quadraticCurveTo(W + sx * gw / 2, 0, W, dip); c.lineTo(W, -0.5); c.lineTo(W + sx * gw, -0.5); c.closePath(); c.clip();
+      const sy = top ? (b - 2) * ry : (H + b + 1) * ry, sh = ry;
+      c.drawImage(im, 0, sy, im.width, sh, x, -1, w, dip + 1.5);
+      c.restore();
+    }
+  }
+  if (!model) {
+    if (look) { c.lineWidth = 3; c.strokeStyle = look.board && look.board.colour || 'rgba(0,0,0,.4)'; c.stroke(); }   // the board's edge
+    const sg = c.createLinearGradient(W, 0, left ? W - b * 2.2 : W + b * 2.2, 0);   // the hollow of the spine
+    sg.addColorStop(0, 'rgba(0,0,0,.42)'); sg.addColorStop(1, 'rgba(0,0,0,0)');
+    c.fillStyle = sg; c.fillRect(x, -b, w, H + 2 * b);
+  }
+  c.restore();
+  if (e.t) rdEdges(c, left ? e.inn : 2 * W - e.inn, e.t, left);
   if (page) rdSlot(c, left ? 2 * k : 2 * k + 1, left ? 0 : W);
+}
+/* The spine of the open book. Between the boards, just above and below the pages, a little of the back of the book
+   shows, with the joints where the boards hinge on either side of it. It isn't in the middle: the back of the book
+   is shared out between the two sides as its leaves are, so that open near the start, the left side's share is small
+   and the right's large; in the middle of the book, they're even. Down in the gutter, where the pages meet in the
+   spine, the headbands (if the model has them): rolls of silk at the head and the tail of the pages, half of them
+   standing past the pages' edges, the rest under the pages. Only for the journal's own book models. */
+// How far the back of the book shows on the left and on the right of the middle (more, the more pages the book has);
+// how much of its height shows at the gutter (h: all of it shows at the joints); f, how far through it's open (0 to 1).
+function rdSpineSides(k){
+  const d = RD.b3; if (!d) return {l:0, r:0, h:0, shift:0, half:1, f:0.5};
+  const n = Math.max(1, RD.n), half = RD.W * Math.min(0.29, 0.07 + 0.22 * n / 600) / 2;
+  const f = Math.min(1, Math.max(0, 2 * (k === undefined ? RD.spread : k) / n)), t = 1 - Math.sin(Math.PI * f);
+  // Open near the front, the back of the book lies lower (less of it shows under the boards' edge), and further to
+  // the left, the right board's edge with it; the left board, lying over the gutter, hides its left half, so only
+  // what's right of the gutter shows. Going in, it rises and comes back to the middle, the left half coming out from
+  // under its board, until in the middle of the book it lies square. Near the back, the same the other way round.
+  const shift = (f < 0.5 ? 1 : -1) * half * 0.55 * t, x0 = -half - shift, x1 = half - shift;   // (from the gutter)
+  const l = Math.max(0, Math.min(-x0, f < 0.5 ? half * (1 - t) : half)), r = Math.max(0, Math.min(x1, f < 0.5 ? half : half * (1 - t)));
+  return {l, r, h:1 - 0.45 * t, f, shift, half};
+}
+// A board's outline as it lies open: its inner edge at the spine alongside the pages, but back at the joint above
+// and below them, where the back of the book shows between the boards.
+function rdBoardPath(c, left){
+  const W = RD.W, H = RD.H, b = rdMargin(), sd = rdSpineSides(), s = left ? sd.l : sd.r, r = RD.b3 ? 0 : b * 0.5, u = 0;
+  const o = left ? -b : 2 * W + b, j = left ? W - s : W + s, sx = left ? 1 : -1, t = b * sd.h;
+  c.beginPath();
+  c.moveTo(o, -b + r); if (r) c.quadraticCurveTo(o, -b, o + sx * r, -b); c.lineTo(W, -b); c.lineTo(W, -t); c.lineTo(j, -t); c.lineTo(j, u); c.lineTo(W, u);
+  c.lineTo(W, H - u); c.lineTo(j, H - u); c.lineTo(j, H + t); c.lineTo(W, H + t); c.lineTo(W, H + b); c.lineTo(o + sx * r, H + b); if (r) c.quadraticCurveTo(o, H + b, o, H + b - r);
+  c.closePath();
+}
+// The back of the book between the boards, above and below the pages, with the headband lying in it against the
+// pages' edges: the model's own picture of it (so the open book shows just what the model did as the cover came
+// down), its left half on the left of the spine and its right half on the right.
+/* The picture of the back of the book as it shows between the boards above the pages: across, from the left
+   board's edge to the right's; down, from the boards' edge to the pages'. (The tail has the same, the other way
+   up.) The covering in the shadow of the hollow, and the headband lying straight across it against the pages. How
+   much of it shows depends on where the book is open (rdSpineSides); the same picture goes on the model
+   (rdWindowTex), so the two never differ. */
+function rdWindowCanvas(k){
+  const sd = rdSpineSides(k), look = RD.look || {}, hb = look.headband;
+  const key = [hb ? hb.join() : '', look.spineColour].join('|');
+  if (RD.winCv && RD.winCv.key === key) return RD.winCv;
+  const Wc = 512, Hc = 128, cv = document.createElement('canvas'); cv.width = Wc; cv.height = Hc; cv.key = key;
+  const x = cv.getContext('2d');
+  const band = Hc * 0.3, rise = 0, up = 1;
+  const yAt = u => { const w = up > 0 ? u : 1 - u; return Hc - band / 2 - rise * (1 - Math.sqrt(Math.max(0, 1 - w * w))); };
+  // the covering, in the shadow of the hollow of the spine, and under the boards' edge
+  x.fillStyle = look.spineColour || READER_BOARD; x.fillRect(0, 0, Wc, Hc);
+  const v = x.createLinearGradient(0, 0, 0, Hc);
+  v.addColorStop(0, 'rgba(0,0,0,.6)'); v.addColorStop(.25, 'rgba(0,0,0,.3)'); v.addColorStop(1, 'rgba(0,0,0,.45)');
+  x.fillStyle = v; x.fillRect(0, 0, Wc, Hc);
+  // under the headband's curve: the heads of the pages
+  const N = 48, curve = []; for (let i = 0; i <= N; i++) curve.push([i / N * Wc, yAt(i / N)]);
+  x.beginPath(); x.moveTo(0, Hc); for (const [px, py] of curve) x.lineTo(px, py + band * 0.3); x.lineTo(Wc, Hc); x.closePath();
+  x.fillStyle = look.edges && look.edges.colour || READER_EDGE; x.fill();
+  x.save(); x.clip(); x.strokeStyle = 'rgba(0,0,0,.08)'; x.lineWidth = 1;
+  for (let yy = 0; yy < Hc; yy += 3) { x.beginPath(); x.moveTo(0, yy); x.lineTo(Wc, yy); x.stroke(); }
+  x.restore();
+  const line = () => { x.beginPath(); curve.forEach(([px, py], i) => i ? x.lineTo(px, py) : x.moveTo(px, py)); };
+  if (hb) {
+    x.lineCap = 'butt';
+    line(); x.strokeStyle = 'rgba(0,0,0,.45)'; x.lineWidth = band * 1.15; x.stroke();   // its shadow
+    line(); x.strokeStyle = hb[0]; x.lineWidth = band; x.stroke();
+    line(); x.strokeStyle = hb[1]; x.lineWidth = band * 0.8; x.setLineDash([band * 0.35, band * 0.45]); x.stroke(); x.setLineDash([]);
+    x.save(); x.translate(0, -band * 0.22); line(); x.strokeStyle = 'rgba(255,255,255,.22)'; x.lineWidth = band * 0.25; x.stroke(); x.restore();
+    x.save(); x.translate(0, band * 0.3); line(); x.strokeStyle = 'rgba(0,0,0,.3)'; x.lineWidth = band * 0.3; x.stroke(); x.restore();
+  } else { line(); x.strokeStyle = 'rgba(0,0,0,.35)'; x.lineWidth = 3; x.stroke(); }
+  // the joints, where it goes in under the boards
+  const s = x.createLinearGradient(0, 0, Wc, 0);
+  s.addColorStop(0, 'rgba(0,0,0,.55)'); s.addColorStop(.1, 'rgba(0,0,0,.08)'); s.addColorStop(.9, 'rgba(0,0,0,.08)'); s.addColorStop(1, 'rgba(0,0,0,.55)');
+  x.fillStyle = s; x.fillRect(0, 0, Wc, Hc);
+  return RD.winCv = cv;
+}
+// That picture on the graphics card, for the model.
+function rdWindowTex(gl, k){
+  const cv = rdWindowCanvas(k), g3 = RD.g3;
+  if (!g3.win || g3.win.cv !== cv) {
+    const tex = g3.win ? g3.win.tex : gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false); gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, cv);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    g3.win = {cv, tex};
+  }
+  return g3.win.tex;
+}
+function rdSpine(c){
+  const sd = rdSpineSides(); if (!RD.b3) return;
+  const W = RD.W, H = RD.H, b = rdMargin(), img = rdWindowCanvas(RD.spread), iw = img.width, ih = img.height;
+  for (const top of [true, false]) {
+    c.save();
+    if (!top) { c.translate(0, H); c.scale(1, -1); }   // the tail: the head's, the other way up
+    // Only what the boards leave uncovered; the picture lies across the whole of it, from where it is, its top
+    // (the part under the boards' edge) cut off, the rest (from the pages' edge up) showing.
+    const t = b * sd.h;
+    c.beginPath(); c.rect(W - sd.l, -t, sd.l + sd.r, t); c.clip();
+    c.drawImage(img, 0, ih * (1 - sd.h), iw, ih * sd.h, W - sd.shift - sd.half, -t, 2 * sd.half, t);
+    c.restore();
+  }
 }
 /* The faces of a board, for a cover turning or lying closed, drawn onto a canvas the size of the board:
    the cover's outside; or the inside of the board with the page that lies on it (if any). A face for the
@@ -10240,11 +11865,27 @@ function drawReader(){
   c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, rdCanvas.width, rdCanvas.height);
   if (!RD.n || !RD.W) return;
   const W = RD.W, H = RD.H, t = RD.turn;
-  RD.shift = t && t.kind === 'rigid' ? rdShiftOf(t.from) + (rdShiftOf(t.to) - rdShiftOf(t.from)) * t.p : rdShiftOf(RD.spread);
+  // (as a cover swings, the book comes to the middle as the board goes over, easing in and out as it does: it's
+  // still once the board lies down, rather than carrying on after it)
+  RD.shift = t && t.kind === 'rigid' ? rdShiftOf(t.from) + (rdShiftOf(t.to) - rdShiftOf(t.from)) * (1 - Math.cos(Math.PI * t.p)) / 2 : rdShiftOf(RD.spread);
   const base = [dpr, 0, 0, dpr, (RD.ox + RD.shift) * dpr, RD.oy * dpr];
   c.setTransform(...base);
-  if (t && t.kind === 'rigid') return drawRigid(c, t, base);
-  const k = RD.spread;
+  const k = RD.spread, rigid = !!t && t.kind === 'rigid';
+  if (RD.b3 && (rigid || k < 0 || k > lastSpread()) && rd3Draw(t)) {
+    // Just as the model comes into view over the open book, the open book is still drawn under it.
+    if (rigid && performance.now() - RD.v3At < 200) {
+      const f = rdRigidFaces(t);
+      if (f.open >= 0 && f.open <= lastSpread()) {
+        rdHalf(c, 'L', f.open, false); rdHalf(c, 'R', f.open, false); rdSpine(c);
+        rdSlotAt(c, 2 * f.open, 0, f.open); rdSlotAt(c, 2 * f.open + 1, RD.W, f.open);
+      }
+    }
+    return;
+  }
+  // A model book lying open, nothing moving: in 3D (see obDraw).
+  if (obActive() && (!t || obLeafTurn(t)) && !FL.active && k >= 0 && k <= lastSpread() && obDraw()) return;
+  rd3Leave();
+  if (rigid) return drawRigid(c, t, base);
   if (k < 0 || k > lastSpread()) {   // closed
     const b = rdMargin(), front = k < 0, cv = rdFace('faceA', {cover:front ? 'front' : 'back'});
     c.save(); c.shadowColor = 'rgba(0,0,0,.45)'; c.shadowBlur = 30 * dpr; c.shadowOffsetY = 8 * dpr;
@@ -10252,46 +11893,80 @@ function drawReader(){
     c.drawImage(cv, front ? W : -b, -b, W + b, H + 2 * b);
     return;
   }
-  rdHalf(c, 'L', k, false); rdHalf(c, 'R', k, false);
+  // A leaf being turned that's the last on its side takes the edges of the pages with it: none are left there.
+  const step = t && t.kind === 'curl' && t.step || 1;   // (leafing through, a turn can go over several leaves at once)
+  const last = t && t.kind === 'curl' ? (t.dir > 0 ? RD.n - 2 * (k + step) <= 0 : 2 * (k - step) <= 0) : false;
+  rdHalf(c, 'L', k, false, last && t.dir < 0 ? 0 : undefined); rdHalf(c, 'R', k, false, last && t.dir > 0 ? 0 : undefined);
+  rdSpine(c);
   const L = 2 * k, R = 2 * k + 1;
   const len = t ? Math.hypot(t.P.x - t.C.x, t.P.y - t.C.y) : 0;
   if (!t || len < 0.5) { rdSlot(c, L, 0); rdSlot(c, R, W); return; }
   // Turning forward, the right page goes over to the left; back, the left page comes over to the right.
   const dir = t.dir, x0 = dir > 0 ? W : 0, xo = dir > 0 ? 0 : W;
-  const front = dir > 0 ? R : L, back = front + dir, under = front + 2 * dir;
+  const front = dir > 0 ? R : L, back = front + dir * (2 * step - 1), under = front + 2 * step * dir;
   rdSlot(c, dir > 0 ? L : R, xo);
   const C = t.C, P = t.P, M = {x:(C.x + P.x) / 2, y:(C.y + P.y) / 2}, n = {x:(P.x - C.x) / len, y:(P.y - C.y) / len};
   const side = s => (s.x - M.x) * n.x + (s.y - M.y) * n.y;   // below 0 on the corner's side of the fold
   const rect = [{x:x0, y:0}, {x:x0 + W, y:0}, {x:x0 + W, y:H}, {x:x0, y:H}];
   const lifted = clipPoly(rect, s => -side(s)), rest = clipPoly(rect, side);
+  // For cutting the pages along the fold only: reaching well past the page (which has its own outline) on every
+  // side, so that the page's own edges aren't cut again (a fraction of a pixel differently, flickering as the turn
+  // starts and ends).
+  const X = 60, rectX = [{x:x0 - X, y:-X}, {x:x0 + W + X, y:-X}, {x:x0 + W + X, y:H + X}, {x:x0 - X, y:H + X}];
+  const liftedX = clipPoly(rectX, s => -side(s)), restX = clipPoly(rectX, side);
+  const landK = k + dir * step;   // the spread it'll lie open at
+  // The shading of the turn (the shadow the leaf casts, and the curve of it at the fold) fades out over its last
+  // stretch, as it comes down flat where it lands: it doesn't all vanish at once as it lands, which flickered.
+  const land = {x:2 * W - C.x, y:C.y}, fade = Math.min(1, Math.hypot(P.x - land.x, P.y - land.y) / (W * 0.45));
+  // (the shade of the spine, on what's coming to lie in it, only in the very last of the leaf's way down)
+  const shade = 1 - Math.min(1, Math.hypot(P.x - land.x, P.y - land.y) / (W * 0.05));
+  const fa = a => 'rgba(0,0,0,' + (a * fade).toFixed(4) + ')', fw = a => 'rgba(255,255,255,' + (a * fade).toFixed(4) + ')';
   // Where the page has lifted away: the page after, in the shadow of the fold.
   if (lifted.length > 2) {
-    c.save(); polyPath(c, lifted); c.clip();
-    rdSlot(c, under, x0);
+    c.save(); polyPath(c, liftedX); c.clip();
+    // (as it'll lie once the leaf is over; and not in the shade of the spine until the leaf is all but down on it:
+    // beside the leaf coming over, that shade would be seen as its outline, showing through it)
+    rdSlotAt(c, under, x0, landK, shade);
+    polyPath(c, lifted); c.clip();
     const sw = Math.max(4, Math.min(len * 0.35, W * 0.2)), g = c.createLinearGradient(M.x, M.y, M.x - n.x * sw, M.y - n.y * sw);
-    g.addColorStop(0, 'rgba(0,0,0,.3)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+    g.addColorStop(0, fa(.3)); g.addColorStop(1, 'rgba(0,0,0,0)');
     c.fillStyle = g; c.fillRect(-W, -H, 4 * W, 3 * H);
     c.restore();
   }
-  if (rest.length > 2) { c.save(); polyPath(c, rest); c.clip(); rdSlot(c, front, x0); c.restore(); }
+  if (rest.length > 2) { c.save(); polyPath(c, restX); c.clip(); rdSlot(c, front, x0); c.restore(); }
   // The part turned over: the lifted part, mirrored across the fold, showing the back of the page.
   const refl = s => { const d = 2 * side(s); return {x:s.x - d * n.x, y:s.y - d * n.y}; };
-  const flap = lifted.map(refl);
+  const flap = lifted.map(refl), flapX = liftedX.map(refl);
   if (flap.length > 2) {
-    c.save(); c.shadowColor = 'rgba(0,0,0,.32)'; c.shadowBlur = 16 * dpr;
-    polyPath(c, flap); c.fillStyle = READER_PAPER; c.fill(); c.restore();
-    c.save(); polyPath(c, flap); c.clip();
-    // The back of the page lies flat on the other side once turned (the page mirrored across the spine);
-    // on its way over, that's mirrored again across the fold.
+    // Its shadow, cast round it (only round it: under it, what shows is what's under the leaf, where its corners dip
+    // into the spine, just as it will once it's down).
+    c.save();
+    c.beginPath(); c.rect(-2 * W, -2 * H, 6 * W, 5 * H);
+    flap.forEach((s, i) => i ? c.lineTo(s.x, s.y) : c.moveTo(s.x, s.y)); c.closePath(); c.clip('evenodd');
+    c.shadowColor = fa(.32); c.shadowBlur = 16 * dpr * fade;
+    polyPath(c, flap); c.fillStyle = RD.look && RD.look.paper && RD.look.paper.colour || READER_PAPER; c.fill(); c.restore();
+    c.save(); polyPath(c, flapX); c.clip();
+    // The back of the page lies flat on the other side once turned (the page mirrored across the spine), as narrow
+    // as it will lie there; on its way over, that's mirrored again across the fold.
     const a = 1 - 2 * n.x * n.x, b = -2 * n.x * n.y, d = 1 - 2 * n.y * n.y, m = 2 * (M.x * n.x + M.y * n.y);
     c.transform(a, b, b, d, m * n.x, m * n.y);
     c.transform(-1, 0, 0, 1, 2 * W, 0);
-    if (back >= 1 && back <= RD.n) rdPage(c, back, xo); else { c.fillStyle = READER_PAPER; c.fillRect(xo, 0, W, H); }
+    const narrow = (x, kk) => { const inn = rdEdgeSplit(x === 0, kk).inn; if (inn) { c.translate(W, 0); c.scale((W - inn) / W, 1); c.translate(-W, 0); } };
+    narrow(xo, landK);
+    if (back >= 1 && back <= RD.n) rdPage(c, back, xo, true);
+    else { c.save(); rdPageShape(c, xo); c.clip(); rdPaper(c, xo, 0, W, H); c.restore(); }
+    rdPageShape(c, xo); c.clip();
     c.setTransform(...base);
+    // As it comes down, it comes into the shade of the spine, just as much as it will lie in once it's down.
+    // (Each side's shade as that side's page lies there: the leaf's where it lands, and beyond the spine, the page
+    // that'll lie there.)
+    // (Only in the very last of its way down, so that it isn't seen as the shadow showing through the leaf.)
+    c.save(); narrow(xo, landK); rdGutter(c, xo, shade); c.restore();
+    c.save(); narrow(x0, landK); rdGutter(c, x0, shade); c.restore();
     // The paper curving over: shaded at the fold, catching the light just past it.
     const reach = Math.max(4, ...flap.map(side)), g = c.createLinearGradient(M.x, M.y, M.x + n.x * reach, M.y + n.y * reach);
-    g.addColorStop(0, 'rgba(0,0,0,.2)'); g.addColorStop(.1, 'rgba(255,255,255,.16)'); g.addColorStop(.4, 'rgba(255,255,255,0)');
-    g.addColorStop(1, 'rgba(0,0,0,.07)');
+    g.addColorStop(0, fa(.2)); g.addColorStop(.1, fw(.16)); g.addColorStop(.4, 'rgba(255,255,255,0)');
+    g.addColorStop(1, fa(.07));
     c.fillStyle = g; c.fillRect(-W, -H, 4 * W, 3 * H);
     c.restore();
   }
@@ -10360,7 +12035,7 @@ const newTurn = (dir, cy) => { const C = cornerOf(dir, cy); return {kind:'curl',
 const ease = u => u < .5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2;
 function rdFinish(t){
   if (t.kind === 'rigid') rdGoTo(t.anim && t.anim.done === 'back' ? t.from : t.to);
-  else rdGoTo(RD.spread + t.dir);
+  else rdGoTo(RD.spread + t.dir * (t.step || 1));
 }
 function rdTick(now){
   RD.raf = 0;
@@ -10369,10 +12044,16 @@ function rdTick(now){
   if (t.mode === 'anim') {
     const a = t.anim, u = Math.min(1, (now - a.t0) / a.dur), e = ease(u);
     if (t.kind === 'rigid') t.p = a.from + (a.to - a.from) * e;
+    else if (a.d3) t.u = u;   // (the leaf eases in and out by itself)
     else t.P = rdClamp(t, {x:a.from.x + (a.to.x - a.from.x) * e, y:a.from.y + (a.to.y - a.from.y) * e + a.lift * Math.sin(Math.PI * e)});
     if (u >= 1) {
+      if (t.kind === 'rigid' && RD.v3) drawReader();   // the model lying just so, for the reader's own drawing to take over from
       RD.turn = null; more = false;
       if (a.done === 'turn' || t.kind === 'rigid') rdFinish(t);
+      // a turn asked for while this one went over comes next
+      const next = RD.next.shift();
+      if (next && RD.doc && !FL.leaving && !FL.active) { rdTurn(next); if (RD.turn) return; }
+      RD.next = [];
     }
   } else if (t.kind === 'curl') {
     const g = rdClamp(t, t.goal), f = t.mode === 'drag' ? 0.5 : 0.22;
@@ -10387,16 +12068,26 @@ function rdTick(now){
 }
 const rdKick = () => { if (!RD.raf) RD.raf = requestAnimationFrame(rdTick); };
 // A page goes over (done 'turn') or falls back ('back') by itself, lifting a little on the way.
+// (as fast as the Menu's page turning speed has it)
+const rdPace = () => Math.max(0.25, Math.min(2, (settings.turnSpeed || 100) / 100));
 function rdAnimate(t, done){
-  const over = done === 'turn';
+  // In 3D, a leaf goes over round the spine, bending (obLeaf); one that was only lifted just lies down again.
+  if (t.kind !== 'rigid' && obActive()) {
+    if (done !== 'turn') { RD.turn = null; drawReader(); return; }
+    t.mode = 'anim'; t.u = 0;
+    t.anim = {d3:true, t0:performance.now(), dur:(t.fast ? t.fast * 1.25 : 820) / rdPace(), done};
+    RD.turn = t; rdKick();
+    return;
+  }
+  const over = done === 'turn', pace = rdPace();
   t.mode = 'anim';
   if (t.kind === 'rigid') {
     const to = over ? 1 : 0;
-    t.anim = {from:t.p, to, t0:performance.now(), dur:Math.max(200, 1100 * Math.abs(to - t.p)), done};
+    t.anim = {from:t.p, to, t0:performance.now(), dur:Math.max(200, 1100 * Math.abs(to - t.p)) / pace, done};
   } else {
     const to = over ? {x:t.dir > 0 ? 0 : 2 * RD.W, y:t.cy} : t.C;
     const far = Math.hypot(to.x - t.P.x, to.y - t.P.y) / (2 * RD.W);
-    t.anim = {from:{x:t.P.x, y:t.P.y}, to, t0:performance.now(), dur:Math.max(160, (over ? 620 : 380) * Math.min(1, far * 1.2)),
+    t.anim = {from:{x:t.P.x, y:t.P.y}, to, t0:performance.now(), dur:(t.fast || Math.max(160, (over ? 620 : 380) * Math.min(1, far * 1.2))) / pace,
       lift:(t.cy > RD.H / 2 ? -1 : 1) * RD.H * (over ? 0.16 : 0.03), done};
   }
   RD.turn = t; rdKick();
@@ -10408,15 +12099,54 @@ function rdRigid(from, to, done){
   readerWant();
   rdAnimate(t, done);
 }
+/* Leafing through to where the book was left, once its cover is open: a few quick turns, the first pages one at a
+   time and then several leaves at a time, however far in that is. Taking hold of it (or closing it) stops it. */
+function rdFlickPath(to){
+  const n = Math.min(to, 8), path = [];
+  for (let i = 1; i <= n; i++) { const j = Math.round(to * Math.pow(i / n, 1.6)); if (j > (path[path.length - 1] || 0)) path.push(j); }
+  return path;
+}
+// Page drawing held (the page being drawn let finish) while the book opens or a leaf goes over by itself.
+async function rdStill(){
+  RD.hold = true;
+  const t0 = performance.now();
+  while (RD.drawing && performance.now() - t0 < 1000) await new Promise(r => setTimeout(r, 15));
+}
+async function rdFlick(path, gen){
+  const wait = ms => new Promise(r => setTimeout(r, ms));
+  for (const [i, j] of path.entries()) {
+    const from = RD.spread, going = () => gen === RD.gen && !FL.leaving && RD.spread === from;
+    if (RD.turn && RD.turn.mode === 'peek') RD.turn = null;   // the pointer only resting near a corner
+    if (!going() || RD.turn || j <= from) return;
+    RD.target = j; RD.hold = false; readerWant();
+    const t0 = performance.now();
+    while (going() && !RD.turn && performance.now() - t0 < 1200 && ![2 * j, 2 * j + 1].every(p => p < 1 || p > RD.n || rdReady(p))) await wait(40);
+    if (RD.turn && RD.turn.mode === 'peek') RD.turn = null;
+    if (!going() || RD.turn) return;
+    await rdStill();
+    if (!going() || (RD.turn && RD.turn.mode !== 'peek')) return;
+    RD.turn = null;
+    const t = newTurn(1, RD.H);
+    t.step = j - from; t.fast = path.length < 3 ? 520 : i === 0 || i === path.length - 1 ? 420 : 300;
+    rdAnimate(t, 'turn');
+    while (gen === RD.gen && RD.turn === t) await wait(30);
+    if (RD.spread !== j) return;
+  }
+}
 // A turn already on its way is finished at once.
 function rdSettle(){
   const t = RD.turn; if (!t || t.mode !== 'anim') return;
   RD.turn = null;
   if (t.kind === 'rigid' || t.anim.done === 'turn') rdFinish(t);
 }
-// Turning by a click or a key.
-function rdTurn(dir, cy){
-  rdSettle();
+// Turning by a click or a key. Asked while a page is going over, it waits for that one to land, so pages go over
+// no faster than they turn: each click or key press (up to a few) is a turn to come, and a key held down one at a time.
+function rdLater(dir, held){
+  if (held ? !RD.next.length : RD.next.length < 3) RD.next.push(dir);
+}
+function rdTurn(dir, cy, held){
+  const on = RD.turn;
+  if (on && on.mode === 'anim') { if (on.anim.done === 'turn') { rdLater(dir, held); return; } rdSettle(); }
   const m = rdMove(dir);
   if (!m) { drawReader(); return; }
   if (m.kind === 'rigid') { rdRigid(RD.spread, m.to, 'turn'); return; }
@@ -10443,7 +12173,7 @@ function rdSideAt(p){
   return p.x < -b || p.x > 2 * RD.W + b ? 0 : p.x >= RD.W ? 1 : -1;
 }
 rdCanvas.addEventListener('pointermove', ev => {
-  if (!RD.doc) return;
+  if (!RD.doc || obActive()) return;
   const p = rdPoint(ev), t = RD.turn;
   if (t && t.mode === 'drag') {
     if (t.kind === 'rigid') t.p = Math.max(0, Math.min(1, t.p0 - t.dir * (ev.clientX - t.downX) / (2 * (RD.W + rdMargin()))));
@@ -10455,7 +12185,7 @@ rdCanvas.addEventListener('pointermove', ev => {
   }
   if (t && t.mode === 'anim') return;
   // Near a corner, the page lifts a little, ready to be taken.
-  const zone = rdZone(p), dir = rdSideAt(p);
+  const zone = obActive() ? null : rdZone(p), dir = rdSideAt(p);   // (in 3D, a page doesn't lift as the pointer nears its corner)
   rdCanvas.style.cursor = zone ? 'grab' : dir && rdMove(dir) ? 'pointer' : '';
   if (zone) {
     const nt = t && t.dir === zone.dir && t.cy === zone.cy ? t : newTurn(zone.dir, zone.cy), k = Math.min(RD.W, RD.H) * 0.07;
@@ -10464,12 +12194,15 @@ rdCanvas.addEventListener('pointermove', ev => {
   } else if (t) { t.goal = {x:t.C.x, y:t.C.y}; t.leaving = true; rdKick(); }
 });
 rdCanvas.addEventListener('pointerleave', () => {
-  const t = RD.turn;
+  const t = RD.turn; if (obActive()) return;
   if (t && t.mode === 'peek') { t.goal = {x:t.C.x, y:t.C.y}; t.leaving = true; rdKick(); }
 });
 rdCanvas.addEventListener('pointerdown', ev => {
-  if (!RD.doc || ev.button !== 0) return;
+  if (!RD.doc || ev.button !== 0 || obActive()) return;
   rdCanvas.focus();
+  // A page (or cover) still going over: a click comes next, after it.
+  const on = RD.turn;
+  if (on && on.mode === 'anim' && on.anim.done === 'turn') { const d = rdSideAt(rdPoint(ev)); if (d) rdLater(d); return; }
   rdSettle();
   const p = rdPoint(ev), zone = rdZone(p), dir = zone ? zone.dir : rdSideAt(p), m = dir ? rdMove(dir) : null;
   if (!m) { if (RD.turn && RD.turn.mode === 'peek') RD.turn = null; drawReader(); return; }
@@ -10487,7 +12220,7 @@ rdCanvas.addEventListener('pointerdown', ev => {
   RD.turn = t; rdCanvas.setPointerCapture(ev.pointerId); rdCanvas.style.cursor = 'grabbing'; rdKick();
 });
 function rdRelease(ev){
-  const t = RD.turn; if (!t || t.mode !== 'drag') return;
+  const t = RD.turn; if (!t || t.mode !== 'drag' || obActive()) return;
   rdCanvas.style.cursor = '';
   if (!t.moved) { rdAnimate(t, 'turn'); return; }   // a click turns the page
   // A flick: still moving fast when let go (held still first, it's not one).
@@ -10497,19 +12230,73 @@ function rdRelease(ev){
   rdAnimate(t, past || flick ? 'turn' : 'back');
 }
 rdCanvas.addEventListener('pointerup', rdRelease);
-rdCanvas.addEventListener('pointercancel', () => { const t = RD.turn; if (t && t.mode === 'drag') rdAnimate(t, 'back'); });
+rdCanvas.addEventListener('pointercancel', () => { const t = RD.turn; if (t && t.mode === 'drag' && !obActive()) rdAnimate(t, 'back'); });
+/* Holding the book in 3D: drag to turn it, Shift-drag (or the right button) to move it, the wheel to bring it nearer,
+   a double-click to put it back. A click (without moving) turns a page: the one on the side of the spine it's on,
+   however the book is turned; or, closed, opens the cover (or shuts it back, closed at the back). */
+const RH = {drag:null};
+// Where the spine runs on the screen, as the open book is drawn: two points on it.
+function rvSpineLine(){
+  const P = RD.obPV; if (!P) return null;
+  const at = y => { const v = [0, y, 0, 1], m = P.pv, o = [0, 1, 2, 3].map(r => m[r] * v[0] + m[4 + r] * v[1] + m[8 + r] * v[2] + m[12 + r] * v[3]);
+    return {x:(o[0] / o[3] + 1) / 2 * P.SW, y:(1 - o[1] / o[3]) / 2 * P.SH}; };
+  return [at(-0.5), at(0.5)];
+}
+rdCanvas.addEventListener('pointerdown', ev => {
+  if (!RD.doc || !obActive() || FL.active || FL.leaving || (ev.button !== 0 && ev.button !== 2)) return;
+  ev.preventDefault(); rdCanvas.focus();
+  rdCanvas.setPointerCapture(ev.pointerId);
+  RH.drag = {id:ev.pointerId, x:ev.clientX, y:ev.clientY, x0:ev.clientX, y0:ev.clientY, pan:ev.shiftKey || ev.button === 2, moved:false};
+});
+rdCanvas.addEventListener('pointermove', ev => {
+  const g = RH.drag; if (!g || ev.pointerId !== g.id || !obActive()) return;
+  const dx = ev.clientX - g.x, dy = ev.clientY - g.y; g.x = ev.clientX; g.y = ev.clientY;
+  if (!g.moved && Math.hypot(ev.clientX - g.x0, ev.clientY - g.y0) < 5) return;
+  g.moved = true; rdCanvas.style.cursor = 'grabbing';
+  if (g.pan) { RV.panX += dx; RV.panY += dy; }
+  else { RV.yaw += dx * 0.008; RV.pitch = Math.max(-Math.PI * 0.95, Math.min(Math.PI * 0.95, RV.pitch + dy * 0.008)); }
+  drawReader();
+});
+const rhEnd = ev => {
+  const g = RH.drag; if (!g || ev.pointerId !== g.id) return;
+  RH.drag = null; rdCanvas.style.cursor = '';
+  if (g.moved || ev.type === 'pointercancel' || g.pan) return;
+  // a click: which way to turn
+  const k = RD.spread, K = lastSpread();
+  let dir = k < 0 ? 1 : k > K ? -1 : 0;
+  if (!dir) {
+    const l = rvSpineLine(); if (!l) return;
+    const cross = (l[1].x - l[0].x) * (ev.clientY - l[0].y) - (l[1].y - l[0].y) * (ev.clientX - l[0].x);
+    dir = cross > 0 ? 1 : -1;   // (right of the spine as it runs up the page: forward)
+  }
+  rdTurn(dir);
+};
+rdCanvas.addEventListener('pointerup', rhEnd);
+rdCanvas.addEventListener('pointercancel', rhEnd);
+rdCanvas.addEventListener('wheel', ev => {
+  if (!RD.doc || !obActive()) return;
+  ev.preventDefault();
+  RV.zoom = Math.max(0.35, Math.min(6, RV.zoom * Math.exp(-ev.deltaY * (ev.deltaMode === 1 ? 0.05 : 0.0015))));
+  drawReader();
+}, {passive:false});
+rdCanvas.addEventListener('dblclick', ev => { if (RD.doc && obActive()) { ev.preventDefault(); rvGoHome(); } });
+rdCanvas.addEventListener('contextmenu', ev => { if (obActive()) ev.preventDefault(); });
 $('bookReader').addEventListener('keydown', ev => {
-  if (ev.target === $('readerGo') || !RD.doc || FL.active) return;
+  if (ev.target === $('readerGo') || !RD.doc || FL.active || FL.leaving) return;
   const forward = ['ArrowRight', 'PageDown', ' '], backward = ['ArrowLeft', 'PageUp'];
-  if (forward.includes(ev.key)) { ev.preventDefault(); rdTurn(1); }
-  else if (backward.includes(ev.key)) { ev.preventDefault(); rdTurn(-1); }
-  else if (ev.key === 'Home') { ev.preventDefault(); rdJump(1); }
-  else if (ev.key === 'End') { ev.preventDefault(); rdJump(RD.n); }
+  if (forward.includes(ev.key)) { ev.preventDefault(); rdTurn(1, undefined, ev.repeat); }
+  else if (backward.includes(ev.key)) { ev.preventDefault(); rdTurn(-1, undefined, ev.repeat); }
+  else if (ev.key === 'Home' || ev.key === 'End') { ev.preventDefault(); RD.turn = null; rdGoTo(ev.key === 'Home' ? 0 : lastSpread()); drawReader(); }
 });
 $('readerGo').addEventListener('change', () => { const v = parseInt($('readerGo').value, 10); if (v) rdJump(v); });
 $('readerGo').addEventListener('keydown', ev => { if (ev.key === 'Enter') { ev.preventDefault(); $('readerGo').blur(); rdCanvas.focus(); } });
-$('readerClose').addEventListener('click', () => $('bookReader').close());
-$('bookReader').addEventListener('close', closeReaderDoc);
+$('readerClose').addEventListener('click', closeBook);
+// Escape: taken at the key itself, as the browser would let the reader's closing be put off only once (pressed
+// again, it would close the reader then and there, cutting the book off on its way back); pressed again while the
+// book's going back, it's let be. ('cancel' is for any other way of asking, like a phone's back button.)
+$('bookReader').addEventListener('keydown', ev => { if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); closeBook(); } }, true);
+$('bookReader').addEventListener('cancel', ev => { ev.preventDefault(); closeBook(); });
+$('bookReader').addEventListener('close', () => { closeReaderDoc(); $('bookReader').classList.remove('flying', 'leaving'); });
 
 /* Dragging an entry from the list into the writing */
 let listDrag = null, listDragEnded = 0;
@@ -11643,15 +13430,20 @@ $('delForever').addEventListener('click', onDeleteForever);
    overhang the page block a little, the spine is gently rounded (or flat), and the page edges are plain,
    gilt or sprinkled red. The proportions come from the photos and can be set by hand. Nothing is
    downloaded: the model is made in the page, saved in journal/models and shown on the right. */
-const BOOK_FACES = ['front', 'spine', 'back', 'pages', 'inside', 'boardEdges', 'headcap', 'tailcap'];
-const BOOK_NAMES = {front:'Front', spine:'Spine', back:'Back', pages:'Page edges', inside:'Inside',
+const BOOK_FACES = ['front', 'spine', 'back', 'pages', 'inside', 'endsheet', 'leaf', 'boardEdges', 'headcap', 'tailcap'];
+const BOOK_NAMES = {front:'Front', spine:'Spine', back:'Back', pages:'Page edges', inside:'Inside', endsheet:'Endpaper', leaf:'Paper',
   boardEdges:'Board edges',
   headcap:'Headcap', tailcap:'Tailcap'};
 // Raised bands across the spine: where each is, as a fraction of the way down from the head. They start out
 // evenly spaced, and each can be moved.
 const evenBands = n => Array.from({length:n}, (_, i) => (i + 1) / (n + 1));
-const book = {entry:null, draft:null, face:'front', faces:{}, dims:{h:20, w:14, t:3, manual:false}, edges:'plain', round:true, bands:[], rimScale:1,
-  timer:0, busy:false, drag:null, view:null, seq:0};
+const BOOK_LEAVES = ['white', 'cream', 'aged', 'laid', 'rough', 'photo'];
+const BOOK_ENDS = ['plain', 'marbled', 'combed', 'stone', 'none', 'photo'];
+// The headbands' two silks: the main one, and the one worked over it.
+const BOOK_HEADBANDS = {red:['#9A2130', '#EFE8D8'], green:['#2F5B3C', '#EFE8D8'], blue:['#264472', '#EFE8D8'], black:['#1F1D1B', '#EFE8D8'],
+  brown:['#6A3F24', '#EFE8D8'], redgold:['#9A2130', '#D2AA4C'], greengold:['#2F5B3C', '#D2AA4C'], bluegold:['#264472', '#D2AA4C']};
+const book = {entry:null, draft:null, face:'front', faces:{}, dims:{h:20, w:14, t:3, manual:false}, edges:'plain', leaf:'white', ends:'plain', backFrom:'own', insideBack:'mirror', round:true, bands:[], rimScale:1,
+  timer:0, busy:false, drag:null, view:null, seq:0, openRaf:0};
 const emptyBookFace = () => ({pic:null, data:null, quad:null, rot:0, extra:[[], [], [], []], zoom:{s:1, px:0, py:0}});
 function bookFace(){ return book.faces[book.face]; }
 
@@ -11792,11 +13584,176 @@ function edgeTexture(kind){
   return cv;
 }
 
+/* The paper of the pages, made up (a page's worth, the shape of the page, stretched over each): cream, aged
+   (yellowed, darker towards the edges, with a few foxing spots), laid (the fine lines and the chain lines of a
+   laid mould), or handmade (rough, with fibres). Made the same way every time. */
+const leafMade = new Map();
+function leafTexture(kind, aspect){
+  const W = 768, H = Math.max(256, Math.min(2048, Math.round(W / Math.max(0.3, aspect)))), key = kind + ':' + H;
+  if (leafMade.has(key)) return leafMade.get(key);
+  let seed = 11; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  // Soft blotches: a few random tones, spread smoothly over the page.
+  const cloud = (cols, rows) => {
+    const small = document.createElement('canvas'); small.width = cols; small.height = rows;
+    const sx = small.getContext('2d'), sd = sx.createImageData(cols, rows);
+    for (let i = 0; i < cols * rows; i++) { const v = rnd() * 255; sd.data.set([v, v, v, 255], i * 4); }
+    sx.putImageData(sd, 0, 0);
+    const big = document.createElement('canvas'); big.width = W; big.height = H;
+    const bx = big.getContext('2d'); bx.imageSmoothingQuality = 'high'; bx.drawImage(small, 0, 0, W, H);
+    return bx.getImageData(0, 0, W, H).data;
+  };
+  const base = {cream:[243, 235, 214], aged:[234, 218, 184], laid:[244, 240, 228], rough:[240, 235, 224]}[kind] || [251, 250, 246];
+  const big = cloud(6, 8), mid = cloud(24, 32);
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const x = cv.getContext('2d'), img = x.createImageData(W, H), d = img.data;
+  const chain = Math.round(W / 14);
+  for (let y = 0; y < H; y++) for (let i = 0; i < W; i++) {
+    const k = (y * W + i) * 4, b = (big[k] / 255 - 0.5), m = (mid[k] / 255 - 0.5), grain = rnd() - 0.5;
+    let v = 0, warm = 0;
+    if (kind === 'cream') v = b * 6 + m * 3 + grain * 5;
+    else if (kind === 'aged') {
+      const ex = Math.min(i, W - 1 - i) / W, ey = Math.min(y, H - 1 - y) / H, edge = Math.max(0, 0.12 - Math.min(ex, ey)) / 0.12;
+      v = b * 16 + m * 7 + grain * 6 - edge * edge * 26; warm = edge * edge * 10 + Math.max(0, -b) * 8;
+    } else if (kind === 'laid') {
+      v = b * 4 + m * 2 + grain * 4 + (y % 3 === 0 ? -4 : 1);
+      const c = i % chain; if (c < 2) v -= 5;
+    } else if (kind === 'rough') v = b * 8 + m * 8 + grain * 16;
+    d[k] = base[0] + v; d[k + 1] = base[1] + v - warm * 0.4; d[k + 2] = base[2] + v - warm; d[k + 3] = 255;
+  }
+  x.putImageData(img, 0, 0);
+  if (kind === 'aged') {   // foxing: a few small brown spots
+    for (let n = 0; n < 26; n++) {
+      const cx = rnd() * W, cy = rnd() * H, r = 1.5 + rnd() * 6, g = x.createRadialGradient(cx, cy, 0, cx, cy, r);
+      g.addColorStop(0, 'rgba(150,100,50,' + (0.18 + rnd() * 0.25) + ')'); g.addColorStop(1, 'rgba(150,100,50,0)');
+      x.fillStyle = g; x.fillRect(cx - r, cy - r, 2 * r, 2 * r);
+    }
+  }
+  if (kind === 'rough') {   // fibres
+    x.lineCap = 'round';
+    for (let n = 0; n < 900; n++) {
+      const cx = rnd() * W, cy = rnd() * H, a = rnd() * Math.PI, l = 4 + rnd() * 14;
+      x.strokeStyle = 'rgba(120,105,80,' + (0.05 + rnd() * 0.08) + ')'; x.lineWidth = 0.6 + rnd() * 0.6;
+      x.beginPath(); x.moveTo(cx, cy); x.quadraticCurveTo(cx + Math.cos(a) * l / 2 + rnd() * 3, cy + Math.sin(a) * l / 2, cx + Math.cos(a) * l, cy + Math.sin(a) * l); x.stroke();
+    }
+  }
+  leafMade.set(key, cv);
+  return cv;
+}
+
+/* Endpaper, made up: a whole sheet, two pages wide (aspect is a page's), folded down the middle into the half pasted
+   inside the board and the free leaf. Plain, marbled (colours drawn out into swirls and veins), combed (bands of
+   colour combed into fine waves) or stone (Turkish marbling: drops of colour lying side by side). The pattern is
+   the same size whatever the page's shape, and made the same way every time. */
+const endMade = new Map();
+// A headband's silk: the main colour, worked over with slanting stitches of the other.
+// The back of the book as it shows between the boards of the open book, above the pages (below them at the tail, the
+// same the other way up): across, from the left board's edge to the right's; down, from the boards' edge to the
+// pages'. The covering's colour, in shadow at the joints and a little in the middle, the edge of the leather turned
+// in over it at the top, and the headband (if there is one) lying across it against the pages, running on under the
+// boards at both ends.
+function spineWindowTexture(colour, headband){
+  const W = 256, H = 128, cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const x = cv.getContext('2d'), rgb = 'rgb(' + colour.map(v => Math.round(v)).join(',') + ')';
+  x.fillStyle = rgb; x.fillRect(0, 0, W, H);
+  const v = x.createLinearGradient(0, 0, 0, H);   // the turned-in edge of the covering, and deeper down towards the pages
+  v.addColorStop(0, 'rgba(0,0,0,.45)'); v.addColorStop(.08, 'rgba(0,0,0,.25)'); v.addColorStop(.3, 'rgba(0,0,0,.3)'); v.addColorStop(1, 'rgba(0,0,0,.45)');
+  x.fillStyle = v; x.fillRect(0, 0, W, H);
+  if (headband) {
+    const y0 = Math.round(H * 0.68), h = H - y0;
+    x.fillStyle = headband[0]; x.fillRect(0, y0, W, h);
+    x.strokeStyle = headband[1]; x.lineWidth = 7;
+    x.beginPath(); for (let i = -40; i < W + 40; i += 14) { x.moveTo(i, H); x.lineTo(i + 12, y0); } x.stroke();
+    const g = x.createLinearGradient(0, y0, 0, H);   // round: lit along its top, shadowed underneath where it meets the pages
+    g.addColorStop(0, 'rgba(0,0,0,.35)'); g.addColorStop(.18, 'rgba(255,255,255,.25)'); g.addColorStop(.5, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,.45)');
+    x.fillStyle = g; x.fillRect(0, y0, W, h);
+  }
+  const s = x.createLinearGradient(0, 0, W, 0);   // the joints, where it goes in under the boards
+  s.addColorStop(0, 'rgba(0,0,0,.55)'); s.addColorStop(.1, 'rgba(0,0,0,.1)'); s.addColorStop(.5, 'rgba(0,0,0,.12)'); s.addColorStop(.9, 'rgba(0,0,0,.1)'); s.addColorStop(1, 'rgba(0,0,0,.55)');
+  x.fillStyle = s; x.fillRect(0, 0, W, H);
+  return cv;
+}
+function headbandTexture(colours){
+  const cv = document.createElement('canvas'); cv.width = 256; cv.height = 64;
+  const x = cv.getContext('2d');
+  x.fillStyle = colours[0]; x.fillRect(0, 0, 256, 64);
+  // (four stitches across the texture, which repeats about once for each width of the roll along it)
+  x.strokeStyle = colours[1]; x.lineWidth = 28;
+  x.beginPath(); for (let i = -128; i < 384; i += 64) { x.moveTo(i, 64); x.lineTo(i + 40, 0); } x.stroke();
+  x.strokeStyle = 'rgba(0,0,0,.28)'; x.lineWidth = 5;
+  x.beginPath(); for (let i = -128; i < 384; i += 64) { x.moveTo(i + 17, 64); x.lineTo(i + 57, 0); } x.stroke();
+  return cv;
+}
+function endTexture(kind, aspect){
+  const H = 1000, W = Math.max(300, Math.min(4000, Math.round(2 * H * aspect))), key = kind + ':' + W;
+  if (endMade.has(key)) return endMade.get(key);
+  let seed = 23; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const x = cv.getContext('2d');
+  const pal = [[34, 52, 96], [142, 38, 36], [196, 152, 64], [232, 222, 196], [38, 74, 62], [112, 72, 40]];
+  if (kind === 'stone') {
+    x.fillStyle = 'rgb(222,208,176)'; x.fillRect(0, 0, W, H);
+    for (let n = 0, all = Math.round(2600 * W * H / (768 * 1097)); n < all; n++) {
+      const cx = rnd() * W, cy = rnd() * H, r = 5 + Math.pow(rnd(), 2) * 30, c = pal[(rnd() * pal.length) | 0];
+      x.beginPath();
+      for (let a = 0; a <= 24; a++) { const t = a / 24 * Math.PI * 2, rr = r * (0.85 + rnd() * 0.3); x.lineTo(cx + Math.cos(t) * rr, cy + Math.sin(t) * rr); }
+      x.closePath(); x.fillStyle = 'rgb(' + c.join(',') + ')'; x.fill();
+      x.lineWidth = 0.8 + rnd(); x.strokeStyle = 'rgba(20,16,12,.55)'; x.stroke();
+    }
+  } else if (kind === 'marbled' || kind === 'combed') {
+    const img = x.createImageData(W, H), d = img.data, n = pal.length;
+    for (let y = 0; y < H; y++) for (let i = 0; i < W; i++) {
+      const u = 1.9 * i / H, v = 1.4 * y / H, k = (y * W + i) * 4;
+      let t;
+      if (kind === 'marbled') {
+        const wx = u + 0.07 * Math.sin(v * 17 + 3 * Math.sin(u * 7)) + 0.025 * Math.sin(v * 53 + u * 13);
+        const wy = v + 0.05 * Math.sin(u * 15 + 2 * Math.sin(v * 9));
+        t = wx * 7 + 0.6 * Math.sin(wy * 11 + wx * 4);
+      } else t = u * 34 + 0.9 * Math.sin(v * 70 + u * 5) + 0.25 * Math.sin(v * 260);
+      const band = Math.floor(t), f = t - band, c = pal[((band % n) + n) % n], next = pal[(((band + 1) % n) + n) % n];
+      const vein = kind === 'marbled' ? Math.max(0, 1 - Math.abs(f - 0.5) * 40) * 0.5 : 0;   // dark veins between colours
+      const m = f > 0.85 ? (f - 0.85) / 0.15 : 0, g = (rnd() - 0.5) * 8;
+      for (let j = 0; j < 3; j++) d[k + j] = (c[j] * (1 - m) + next[j] * m) * (1 - vein) + g;
+      d[k + 3] = 255;
+    }
+    x.putImageData(img, 0, 0);
+  } else {   // plain: a sheet of cream paper
+    const half = leafTexture('cream', aspect);
+    x.drawImage(half, 0, 0, W / 2, H); x.drawImage(half, W / 2, 0, W / 2, H);
+    x.fillStyle = 'rgba(214,196,160,.35)'; x.fillRect(0, 0, W, H);
+  }
+  endMade.set(key, cv);
+  return cv;
+}
+/* The inside of a board as a rebound book has it: the covering turned in over the edges of the board (under: the
+   photo of the inside of a board, or a colour), and the endpaper (sheet) pasted over it, stopping short of the edges at the head, fore-edge and tail and
+   running into the joint at the spine (on the right, as the board lies open). */
+// One half of a sheet (0 the left, 1 the right).
+function sheetHalf(cv, i){
+  const h = document.createElement('canvas'); h.width = Math.round(cv.width / 2); h.height = cv.height;
+  h.getContext('2d').drawImage(cv, -i * h.width, 0);
+  return h;
+}
+function pastedown(sheet, under, aspect, spineLeft, inset){
+  const H = 1400, W = Math.max(200, Math.round(H * aspect)), cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const x = cv.getContext('2d');
+  if (Array.isArray(under)) { x.fillStyle = 'rgb(' + under.map(v => Math.round(v)).join(',') + ')'; x.fillRect(0, 0, W, H); }
+  else x.drawImage(under, 0, 0, W, H);
+  // (spineLeft: for the back board, as it lies open, with the spine on its left)
+  // (just the size of the pages: in from the head, tail and fore-edge by as far as the boards reach past them)
+  const ins = inset || 0.016, ix = Math.round(W * ins / aspect), iy = Math.round(H * ins), sx = spineLeft ? 0 : ix, ex = spineLeft ? W - ix : W;
+  x.drawImage(sheet, sx, iy, W - ix, H - 2 * iy);
+  // the sheet's edge, a little raised over the leather
+  x.strokeStyle = 'rgba(0,0,0,.28)'; x.lineWidth = 2;
+  const fx = spineLeft ? ex : sx, jx = spineLeft ? 0 : W;
+  x.beginPath(); x.moveTo(jx, iy); x.lineTo(fx, iy); x.lineTo(fx, H - iy); x.lineTo(jx, H - iy); x.stroke();
+  return cv;
+}
+
 /* The book's shape. Units don't matter (the viewer scales every model to fit); the height is 1.
    Up is +Y, the front cover faces +Z, and the spine is at -X, as when you hold a book to read it. */
 function bookGeometry(p){
   const H = 1, W = p.w / p.h, T = p.t / p.h;
-  const bt = Math.min(0.022, T * 0.16), sq = Math.min(0.016, W * 0.04), d = p.round ? T * 0.2 : T * 0.02;
+  const bt = Math.min(0.013, T * 0.09), sq = Math.min(0.016, W * 0.04), d = p.round ? T * 0.2 : T * 0.02;
   const xl = -W / 2, xr = W / 2, zo = T / 2, zi = T / 2 - bt, top = H / 2;
   const groups = new Map();   // material name -> {pos, nrm, uv, idx}
   const g = name => { if (!groups.has(name)) groups.set(name, {pos:[], nrm:[], uv:[], idx:[]}); return groups.get(name); };
@@ -11840,6 +13797,16 @@ function bookGeometry(p){
     return f === 'px' ? [(py1 - y) / (2 * py1) * reps, across] : [(x - xl) / (px1 - xl) * reps, across];
   };
   box(xl, px1, -py1, py1, -zi, zi, {px:'edges', py:p.edges === 'giltTop' ? 'giltEdge' : 'edges', ny:'edges'}, edgeUv);
+  // The paper of the pages, on the two faces of the page block that the boards lie on, just under them: seen only
+  // once the book is open, as it's read (the reader lays the PDF's pages on it).
+  // Over it, the free endpapers: the first and last leaves, their decorated side facing the boards.
+  for (const [mat, on, zl] of [['leaf', p.leaf, Math.max(zi * 0.5, zi - 0.004)], ['endsheet', p.ends, Math.max(zi * 0.75, zi - 0.002)]]) {
+    if (!on) continue;
+    for (const back of [false, true]) {
+      const z = back ? -zl : zl, pts = [[xl, -py1, z], [px1, -py1, z], [px1, py1, z], [xl, py1, z]];
+      quad(mat, pts, [0, 0, back ? -1 : 1], pts.map(([x, y]) => [back ? (px1 - x) / (px1 - xl) : (x - xl) / (px1 - xl), (py1 - y) / (2 * py1)]));
+    }
+  }
   // The spine: an arc from the back board round to the front, carrying the spine photo, closed at head and tail.
   const N = p.round ? 20 : 2, sp = g('spine'), sb = sp.pos.length / 3;
   const arc = [];
@@ -11893,6 +13860,27 @@ function bookGeometry(p){
     quad(mat, flat, [0, ny, 0], flat.map(([x, , z]) => capUv(x, z)));
     quad('capSide', [[xb, ny * py1, -zi], [xb, y, -zi], [xb, y, zi], [xb, ny * py1, zi]], [1, 0, 0], [[0, 0], [0, 0], [0, 0], [0, 0]]);
   }
+  // The headbands: a little roll of silk at the head and the tail of the pages, along the back of the page block
+  // where it meets the spine, half of it set into the spine, standing a little proud of the pages' edges (but not of
+  // the boards).
+  if (p.headband) {
+    const r = Math.min(sq * 0.3, Math.max(0.002, T * 0.025)), cx = xl, reps = Math.max(1, Math.round(zi / r));
+    for (const s of [1, -1]) {
+      headbandTube(cx, s * (py1 - r * 0.3), r, zi, reps, g('headband'), [d, zo]);
+      // Behind it, the inside of the spine's end (the covering turned in over the headband): it stays put as the
+      // book opens, so the headband always has it at its back.
+      const wall = [[xl, s * py1, -zi], [xl, s * top, -zi], [xl, s * top, zi], [xl, s * py1, zi]];
+      quad('headWall', wall, [1, 0, 0], [[0, 0], [0, 0], [0, 0], [0, 0]]);
+    }
+  }
+  // The back of the book between the boards, above and below the pages, as the reader shows it when the book lies
+  // open: a strip on the inside of each board by the spine, the width of the boards' reach past the pages (the
+  // reader sets how wide each side of it is), the front board's going over with it. Closed, it's out of sight.
+  for (const s of [1, -1]) for (const back of [false, true]) {
+    const z = back ? -(zi - 0.0006) : zi - 0.0006, y0 = s * py1, y1 = s * top, x1 = xl + sq;
+    const pts = [[xl, y1, z], [x1, y1, z], [x1, y0, z], [xl, y0, z]];
+    quad('spineWindow', pts, [0, 0, back ? 1 : -1], pts.map(([x, y]) => [back ? 0.5 + 0.5 * (x - xl) / sq : 0.5 - 0.5 * (x - xl) / sq, (y1 - y) / (y1 - y0)]));
+  }
   return groups;
 }
 
@@ -11931,7 +13919,7 @@ function writeGlb(groups, materials, images){
     if (!groups.has(name)) continue;
     const pbr = {metallicFactor:0, roughnessFactor:0.85};
     if (m.tex) pbr.baseColorTexture = {index:imageIndex.get(m.tex)}; else pbr.baseColorFactor = toLinear(m.colour);
-    json.materials.push({name, pbrMetallicRoughness:pbr}); matIndex.set(name, json.materials.length - 1);
+    json.materials.push(Object.assign({name, pbrMetallicRoughness:pbr}, m.extras ? {extras:m.extras} : {})); matIndex.set(name, json.materials.length - 1);
   }
   for (const [name, o] of groups) {
     if (!matIndex.has(name)) continue;
@@ -11964,8 +13952,29 @@ function mirrored(cv){
 async function buildBookGlb(maxSide){
   const f = book.faces, img = {};
   for (const k of BOOK_FACES) if (f[k].data) img[k] = straighten(f[k], k === 'headcap' || k === 'tailcap' ? Math.min(maxSide, 1024) : maxSide);
-  if (img.inside) img.insideBack = mirrored(img.inside);
   const board = img.front ? edgeColour(img.front) : [110, 40, 40];
+  // The back cover can be the front's photo, flipped across the spine (as a binding decorated alike on both sides
+  // is), or just as it is.
+  if (book.backFrom !== 'own' && img.front) img.back = book.backFrom === 'mirror' ? mirrored(img.front) : img.front;
+  // The inside of the back board is the front's, flipped across the spine or just as it is. As the boards lie
+  // open, the front's has its spine on the right, the back's on the left.
+  const flip = book.insideBack !== 'same', under = img.inside;
+  // The endpapers: a photo of endpaper, or one made up; pasted inside the boards over the turned-in covering (the
+  // photo of the inside of a board, if there is one, or the cover's colour), and the free leaf at each end.
+  if (book.ends === 'none' || (book.ends === 'photo' && !img.endsheet)) delete img.endsheet;
+  else {
+    // A made-up sheet is folded: its left half pasted down, its right half the free leaf, the pattern running on
+    // from one to the other across the fold. A photo does for both.
+    let paste = img.endsheet;
+    if (book.ends !== 'photo') { const whole = endTexture(book.ends, book.dims.w / book.dims.h); paste = sheetHalf(whole, 0); img.endsheet = sheetHalf(whole, 1); }
+    const aspect = book.dims.w / book.dims.h, turnIn = under || board.map(v => v * 0.9);
+    // (level with the pages at head and tail, as far in as the page block is from the boards' edges)
+    const inset = Math.min(0.016, aspect * 0.04);
+    img.inside = pastedown(paste, turnIn, aspect, false, inset);
+    // Just as it is, the endpaper and the turned-in covering aren't flipped, but it's still pasted into the joint.
+    if (!flip) img.insideBack = pastedown(paste, turnIn, aspect, true, inset);
+  }
+  if (img.inside && !img.insideBack) img.insideBack = flip ? mirrored(img.inside) : img.inside;
   const dark = c => c.map(v => v * 0.82);
   const capColour = dark(img.spine ? edgeColour(img.spine) : board), endpaper = [232, 224, 204];
   const materials = {
@@ -11975,21 +13984,29 @@ async function buildBookGlb(maxSide){
     headcap:img.headcap ? {tex:'headcap'} : {colour:capColour},
     tailcap:img.tailcap ? {tex:'tailcap'} : img.headcap ? {tex:'headcap'} : {colour:capColour},
     capSide:{colour:dark(img.headcap || img.tailcap ? edgeColour(img.headcap || img.tailcap) : capColour)},
+    headWall:{colour:dark(dark(img.spine ? edgeColour(img.spine) : board))},
     board:{colour:dark(board)},
     endpaper:{colour:endpaper},
     insideFront:img.inside ? {tex:'inside'} : {colour:endpaper},
     insideBack:img.inside ? {tex:'insideBack'} : {colour:endpaper},
     rim:img.boardEdges ? {tex:'boardEdges'} : {colour:dark(board)},
     edges:{tex:book.edges === 'photo' && img.pages ? 'pages' : book.edges === 'gilt' ? 'gilt' : book.edges === 'red' ? 'red' : 'paper'},
-    giltEdge:{tex:'gilt'}};
+    giltEdge:{tex:'gilt'},
+    endsheet:{tex:'endsheet'},
+    headband:{tex:'headband', extras:{colours:BOOK_HEADBANDS[book.headband] || null}},
+    spineWindow:{tex:'spineWindow'},
+    leaf:book.leaf === 'photo' && img.leaf ? {tex:'leaf'} : book.leaf === 'white' || book.leaf === 'photo' ? {colour:[251, 250, 246]} : {tex:'leaf-' + book.leaf}};
   const groups = bookGeometry({h:book.dims.h, w:book.dims.w, t:book.dims.t, round:book.round, edges:img.pages && book.edges === 'photo' ? 'photo' : book.edges,
     inside:!!img.inside, bands:book.bands,
     rim:img.boardEdges ? {aspect:img.boardEdges.width / img.boardEdges.height, scale:book.rimScale} : null,
-    head:!!img.headcap, tail:!!(img.tailcap || img.headcap)});
+    head:!!img.headcap, tail:!!(img.tailcap || img.headcap), leaf:true, ends:!!img.endsheet, headband:!!BOOK_HEADBANDS[book.headband]});
   // Only the pictures the model's parts actually use go into the file.
   const used = new Set(Object.entries(materials).filter(([name]) => groups.has(name)).map(([, m]) => m.tex).filter(Boolean)), images = [];
   for (const [k, cv] of Object.entries(img)) if (used.has(k)) images.push([k, await canvasJpeg(cv, 0.9)]);
   for (const k of ['paper', 'gilt', 'red']) if (used.has(k)) images.push([k, await canvasJpeg(edgeTexture(k), 0.85)]);
+  if (used.has('headband')) images.push(['headband', await canvasJpeg(headbandTexture(BOOK_HEADBANDS[book.headband]), 0.9)]);
+  if (used.has('spineWindow')) images.push(['spineWindow', await canvasJpeg(spineWindowTexture(img.spine ? edgeColour(img.spine) : board, BOOK_HEADBANDS[book.headband] || null), 0.92)]);
+  for (const k of BOOK_LEAVES) if (used.has('leaf-' + k)) images.push(['leaf-' + k, await canvasJpeg(leafTexture(k, book.dims.w / book.dims.h), 0.88)]);
   return writeGlb(groups, materials, images);
 }
 
@@ -11999,12 +14016,17 @@ async function openBookMaker(picture, draft){
   const e = entries.get(currentId); if (!e) return;
   const d = draft ? draft.data || {} : null;
   book.entry = currentId; book.draft = draft ? draft.code : null; book.face = 'front';
-  book.dims = {h:20, w:14, t:3, manual:false}; book.edges = 'plain'; book.round = true; book.bands = []; book.rimScale = 1;
+  book.dims = {h:20, w:14, t:3, manual:false}; book.edges = 'plain'; book.leaf = 'white'; book.ends = 'plain'; book.headband = 'red'; book.backFrom = 'own'; book.insideBack = 'mirror'; book.round = true; book.bands = []; book.rimScale = 1;
   for (const k of BOOK_FACES) book.faces[k] = emptyBookFace();
   if (d) {
     const dm = d.dims || {}, ok = v => typeof v === 'number' && v > 0;
     if (ok(dm.h) && ok(dm.w) && ok(dm.t)) book.dims = {h:dm.h, w:dm.w, t:dm.t, manual:!!dm.manual};
     if (['plain', 'gilt', 'giltTop', 'red', 'photo'].includes(d.edges)) book.edges = d.edges;
+    if (BOOK_LEAVES.includes(d.leaf)) book.leaf = d.leaf;
+    if (BOOK_ENDS.includes(d.ends)) book.ends = d.ends;
+    if (d.headband === 'none' || BOOK_HEADBANDS[d.headband]) book.headband = d.headband;
+    if (['own', 'mirror', 'same'].includes(d.backFrom)) book.backFrom = d.backFrom;
+    if (['mirror', 'same'].includes(d.insideBack)) book.insideBack = d.insideBack;
     book.round = d.round !== false;
     if (Array.isArray(d.bands) && d.bands.length <= 5 && d.bands.every(v => typeof v === 'number' && v > 0 && v < 1))
       book.bands = d.bands.slice();
@@ -12017,16 +14039,22 @@ async function openBookMaker(picture, draft){
   }
   $('bookEdges').value = book.edges === 'photo' ? 'plain' : book.edges; $('bookSpine').value = book.round ? 'round' : 'flat';
   $('bookBands').value = String(book.bands.length); showBookBands(); $('bookEdgesPhoto').disabled = true;
+  $('bookLeaf').value = book.leaf === 'photo' ? 'white' : book.leaf; $('bookLeafPhoto').disabled = true;
+  $('bookEnds').value = book.ends === 'photo' ? 'plain' : book.ends; $('bookEndsPhoto').disabled = true;
+  $('bookBackFrom').value = book.backFrom; $('bookInsideBack').value = book.insideBack; $('bookHeadband').value = book.headband;
   $('bookDiscard').hidden = !book.draft; disarm($('bookDiscard'), 'Discard draft');
   M3.states.delete('book-preview');
   $('bookDialog').showModal();
   if (!book.view) book.view = m3PreviewView($('bookPreview'), 'book-preview', $('bookPreviewNote'));
+  cancelAnimationFrame(book.openRaf); book.view.open = 0; $('bookOpen').setAttribute('aria-pressed', 'false'); $('bookOpen').textContent = 'Show open';
   showBookFace();
   const saved = d && d.faces && typeof d.faces === 'object' ? BOOK_FACES.filter(k => d.faces[k] && IMG_NAME.test(d.faces[k].pic || '')) : [];
   if (saved.length) {
     await Promise.all(saved.map(k => setBookPicture(k, d.faces[k].pic, d.faces[k])));
     if (book.edges === 'photo' && !book.faces.pages.data) book.edges = 'plain';
-    $('bookEdges').value = book.edges;
+    if (book.leaf === 'photo' && !book.faces.leaf.data) book.leaf = 'white';
+    if (book.ends === 'photo' && !book.faces.endsheet.data) book.ends = 'plain';
+    $('bookEdges').value = book.edges; $('bookLeaf').value = book.leaf; $('bookEnds').value = book.ends;
   } else if (picture) await setBookPicture('front', picture);
   else { showBookDims(); showBookPreview(); }
 }
@@ -12043,6 +14071,8 @@ async function setBookPicture(face, picture, saved){
   const f = book.faces[face];
   Object.assign(f, emptyBookFace(), {pic:picture});
   if (face === 'pages' && !saved) pagesPhoto(!!picture);
+  if (face === 'leaf' && !saved) leafPhoto(!!picture);
+  if (face === 'endsheet' && !saved) endsPhoto(!!picture);
   showBookFace();
   if (!picture) { bookChanged(); return; }
   try {
@@ -12063,6 +14093,8 @@ async function setBookPicture(face, picture, saved){
       f.quad = [[mx, my], [cv.width - mx, my], [cv.width - mx, cv.height - my], [mx, cv.height - my]];
     }
     if (face === 'pages') $('bookEdgesPhoto').disabled = false;
+    if (face === 'leaf') $('bookLeafPhoto').disabled = false;
+    if (face === 'endsheet') $('bookEndsPhoto').disabled = false;
   } catch (err) { f.pic = null; setStatus("That picture couldn't be read.", true); }
   showBookFace(); bookChanged();
 }
@@ -12072,16 +14104,32 @@ function pagesPhoto(on){
   if (on) book.edges = 'photo'; else if (book.edges === 'photo') book.edges = 'plain';
   $('bookEdges').value = book.edges;
 }
+// A photo of a page's paper goes on the pages in place of the paper chosen under Paper.
+function leafPhoto(on){
+  $('bookLeafPhoto').disabled = !on;
+  if (on) book.leaf = 'photo'; else if (book.leaf === 'photo') book.leaf = 'white';
+  $('bookLeaf').value = book.leaf;
+}
+// A photo of endpaper goes on the endpapers in place of the pattern chosen under Endpapers.
+function endsPhoto(on){
+  $('bookEndsPhoto').disabled = !on;
+  if (on) book.ends = 'photo'; else if (book.ends === 'photo') book.ends = 'plain';
+  $('bookEnds').value = book.ends;
+}
 // What to choose for each side, when it has no photo yet, and what to do with the photo once it has.
 const BOOK_NOTES = {
   front:'Choose a photo of the front cover from the pictures below.',
   pages:'Choose a photo of the page edges below, to put on the head, fore-edge and tail. Without one, they\u2019re as set under Page edges.',
-  inside:'Choose a photo of the inside of a board, opened out, with its turn-ins. It goes inside both boards; only its outer edge shows, above the page edges at the head, fore-edge and tail. Without one, it\u2019s plain endpaper.',
+  inside:'Choose a photo of the inside of a board, opened out, showing the covering turned in over its edges. It goes inside both boards, and the endpaper (as set under Endpapers) is pasted over it, leaving its edges showing round it; with Endpapers set to None, it\u2019s seen whole. Without one, the turn-ins are the colour of the cover.',
+  endsheet:'Choose a photo of endpaper (marbled, patterned or plain): a sheet of it, or a stretch of it. It\u2019s pasted inside both boards, leaving the turned-in edges of the covering showing round it, and makes the free leaf at the start and the end of the book. Without one, it\u2019s as set under Endpapers.',
+  leaf:'Choose a photo of a blank page (or any paper), to be the paper the book\u2019s pages are printed on as it\u2019s read: it\u2019s stretched over each page, under the print. Without one, the paper is as set under Paper.',
   boardEdges:'Choose a photo of the edge of a board (its narrow outer edge, where the gilt roll or the leather\u2019s edge is). A short stretch is enough: it\u2019s repeated along the head, fore-edge and tail of both boards. Without one, they\u2019re the colour of the cover.',
   headcap:'Choose a photo of the head of the spine, seen from above. Without one, it\u2019s the colour of the spine.',
   tailcap:'Choose a photo of the tail of the spine, seen from below. Without one, the headcap\u2019s photo is used (or the colour of the spine).'};
 const BOOK_HINTS = {
   pages:'Drag the corners onto the edges of the pages, then Turn it until the lines of the pages run from side to side.',
+  leaf:'Drag the corners onto the corners of the page (or round the stretch of paper to use), and Turn it until its top is marked Top. Whole photo uses all of it.',
+  endsheet:'Drag the corners round the endpaper (or the stretch of it to use), and Turn it until its top is marked Top. Whole photo uses all of it.',
   inside:'Drag the corners onto the corners of the board, and Turn it until the top is marked Top: the spine should be on the right, as when the book lies open.',
   boardEdges:'Drag the corners tightly round a stretch of the edge (just its depth, nothing above or below), and Turn it until it runs from side to side, with the outside of the board marked Top.',
   headcap:'Drag the corners round the end of the spine, and Turn it until the outside of the spine is marked Top.',
@@ -12100,6 +14148,11 @@ function showBookFace(){
     || 'Drag the corners onto the book\u2019s corners, and Turn it until the top is marked Top. Drag a + to add a point where a side curves.')
     + ' Scroll to zoom in.';
   $('bookCropNote').hidden = !!f.pic;
+  if (book.face === 'back' && book.backFrom !== 'own') {   // the back is the front's photo: said over whatever's here
+    $('bookCropNote').textContent = 'The back cover is the front\u2019s photo, ' + (book.backFrom === 'mirror' ? 'mirrored across the spine' : 'just as it is')
+      + ' (as set under Back cover). Choose Its own photo there to give it one of its own.';
+    $('bookCropNote').hidden = false;
+  }
   $('bookTurn').disabled = $('bookWhole').disabled = !f.data;
   $('bookNone').hidden = book.face === 'front'; $('bookNone').disabled = !f.pic;
   const pics = $('bookPics'); pics.replaceChildren();
@@ -12379,6 +14432,11 @@ for (const id of ['bookH', 'bookW', 'bookT']) $(id).addEventListener('input', ()
 });
 $('bookFromPhotos').addEventListener('click', () => { book.dims.manual = false; bookChanged(); });
 $('bookEdges').addEventListener('change', () => { book.edges = $('bookEdges').value; bookChanged(); });
+$('bookLeaf').addEventListener('change', () => { book.leaf = $('bookLeaf').value; bookChanged(); });
+$('bookEnds').addEventListener('change', () => { book.ends = $('bookEnds').value; bookChanged(); });
+$('bookHeadband').addEventListener('change', () => { book.headband = $('bookHeadband').value; bookChanged(); });
+$('bookBackFrom').addEventListener('change', () => { book.backFrom = $('bookBackFrom').value; showBookFace(); bookChanged(); });
+$('bookInsideBack').addEventListener('change', () => { book.insideBack = $('bookInsideBack').value; bookChanged(); });
 $('bookSpine').addEventListener('change', () => { book.round = $('bookSpine').value === 'round'; bookChanged(); });
 // Anything changed: the preview follows a moment later.
 function bookChanged(){
@@ -12396,6 +14454,20 @@ async function showBookPreview(){
   m3SetPreview('book-preview', await parseGlb(buf));
   book.view.say('');
 }
+// Show open: the preview's front board swings open (or shut again), to see the book as it lies open at its endpapers.
+function bookOpenTo(to){
+  const v = book.view; if (!v) return;
+  $('bookOpen').setAttribute('aria-pressed', String(to > 0)); $('bookOpen').textContent = to > 0 ? 'Show closed' : 'Show open';
+  cancelAnimationFrame(book.openRaf);
+  const from = v.open || 0, t0 = performance.now(), ms = 700 * Math.abs(to - from);
+  const step = now => {
+    const u = ms ? Math.min(1, (now - t0) / ms) : 1;
+    v.open = from + (to - from) * ease(u); m3Redraw('book-preview');
+    if (u < 1) book.openRaf = requestAnimationFrame(step);
+  };
+  book.openRaf = requestAnimationFrame(step);
+}
+$('bookOpen').addEventListener('click', () => bookOpenTo($('bookOpen').getAttribute('aria-pressed') === 'true' ? 0 : 1));
 $('bookCancel').addEventListener('click', () => $('bookDialog').close());
 $('bookDialog').addEventListener('close', () => { clearTimeout(book.timer); book.seq++; m3SetPreview('book-preview', null); });
 $('bookMake').addEventListener('click', async () => {
@@ -12429,7 +14501,7 @@ function bookDraftData(){
     const f = book.faces[k]; if (!f.pic) continue;
     faces[k] = f.data ? {pic:f.pic, quad:f.quad, rot:f.rot, extra:f.extra, w:f.data.width, h:f.data.height} : {pic:f.pic};
   }
-  return {entry:book.entry, saved:Date.now(), face:book.face, faces, dims:Object.assign({}, book.dims), edges:book.edges, round:book.round, bands:book.bands.slice(), rimScale:book.rimScale};
+  return {entry:book.entry, saved:Date.now(), face:book.face, faces, dims:Object.assign({}, book.dims), edges:book.edges, leaf:book.leaf, ends:book.ends, headband:book.headband, backFrom:book.backFrom, insideBack:book.insideBack, round:book.round, bands:book.bands.slice(), rimScale:book.rimScale};
 }
 $('bookDraft').addEventListener('click', async () => {
   const id = book.entry, e = entries.get(id), btn = $('bookDraft'); if (!e || book.busy) return;
