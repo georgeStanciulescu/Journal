@@ -10404,9 +10404,7 @@ function rd3Joint(gl, L, m, d, side, th, open, lean, G){
   const along = [c, side * sn], out = [-sn, side * c];
   const cap = p => [((p[0] - bi[0]) * along[0] + (p[1] - bi[1]) * along[1]) / tile,
     Math.min(1, Math.max(0, 1 - ((p[0] - bi[0]) * out[0] + (p[1] - bi[1]) * out[1]) / Math.max(1e-6, bt)))];
-  const half = arc.slice(0, Math.ceil(arc.length / 2));
-  const jf = obJointFill(cover, ends, bo, bi, C, pg, half, T, tx, cap, [-along[0], -along[1]]);
-  obFillet(cover, ends, jf.corner, jf.dir, jf.from, obFilletR(d) * (1 - c) / 2, T, tx, cap, bi, arc);
+  obJointFill(cover, ends, bo, bi, C, pg, arc, T, tx, cap, obGrooveR(d) * (1 - c) / 2);
   const ins = side > 0 ? part('insideFront', 'endpaper') : part('insideBack', 'endpaper');
   draw(cover, side > 0 ? part('front', 'board') : part('back', 'front', 'board'), [0.3, 0.08, 0.08, 1]); draw(paste, ins, [0.8, 0.77, 0.7, 1]); draw(ends, part('rim', 'board'), [0.3, 0.08, 0.08, 1]);
   gl.bindVertexArray(null);
@@ -10520,77 +10518,39 @@ function obFlat(mesh, poly, Y, cap){
     for (const t of tri) mesh.idx.push(b0 + t);
   }
 }
-/* The inside corner where the outside of a board (or of the joint) meets the round of the spine, filled with the
-   covering curving from the one into the other: from the line along the board's outside (through C, running
-   towards the spine as t0) a way out along it (L), round to the spine's outline as far along it. Nothing if the
-   spine runs straight on from the board there. arc: the spine's outline from C outwards. */
-function obFillet(cover, ends, C, t0, arc, L, Y, tx, cap, inside, spine){
-  // (smaller, if need be, until it lies clear of the spine's outline; none, if it can't)
-  for (let tries = 0; tries < 5; tries++, L /= 2) if (obFilletTry(cover, ends, C, t0, arc, L, Y, tx, cap, inside, spine)) return;
-}
-// Whether point q lies inside the outline P (by counting crossings).
-function obInside(P, q){
-  let c = false;
-  for (let i = 0, j = P.length - 1; i < P.length; j = i++) {
-    const a = P[i], b = P[j];
-    if ((a[1] > q[1]) !== (b[1] > q[1]) && q[0] < (b[0] - a[0]) * (q[1] - a[1]) / (b[1] - a[1]) + a[0]) c = !c;
+/* A joint where a board lies out from the spine, closed like the board itself: the covering running from the
+   board's outside edge (Bo) to the spine's edge (C), so the board and the spine meet across the board's whole
+   thickness; and its ends, at the head and the tail (at y = +-Y), filled from the board's edge (inside corner Bi,
+   outside Bo) round to the spine's edge and in to the back of the leaves (In). Points are [x, z, k], k scaling their
+   y (a board leaning as it stands up). cap(pt) is where the photo of the boards' edges falls on a point of the ends;
+   tx, the column of the board's photo for the covering. arc: the spine's outline at its end, from C outwards.
+   The covering stops at the spine's edge and never goes over the spine, so the whole of the spine's photo, from edge
+   to edge, shows however far the book is open (a real spine keeps all its lettering as the book is read). Where the
+   spine turns away from the joint into the inside corner they make (as it hangs under the book), the covering
+   dips into a shallow groove over the last stretch (R) before the spine's edge, as the covering does at a real
+   book's joint, coming out of it along the spine's own curve, so that the one runs smoothly on into the other. */
+function obJointFill(cover, ends, Bo, Bi, C, In, arc, Y, tx, cap, R){
+  const ux = C[0] - Bo[0], uz = C[1] - Bo[1], ul = Math.hypot(ux, uz), path = [Bo];
+  if (ul > 1e-9 && arc.length > 1 && R > 0) {
+    const u = [ux / ul, uz / ul], a = arc[1], vl = Math.hypot(a[0] - C[0], a[1] - C[1]) || 1, v = [(a[0] - C[0]) / vl, (a[1] - C[1]) / vl];
+    // (an inside corner: the spine turns off the joint's line to the outside, away from the board's inside, and not
+    // so far that it doubles back on it, as where the board lies lower than the spine's edge)
+    const cross = (p, q) => p[0] * q[1] - p[1] * q[0];
+    if (cross(u, v) * cross(u, [Bi[0] - Bo[0], Bi[1] - Bo[1]]) < 0 && u[0] * v[0] + u[1] * v[1] > -0.5) {
+      const l = Math.min(R, 0.8 * ul), P0 = [C[0] - u[0] * l, C[1] - u[1] * l], h = 0.55 * l;
+      const P1 = [P0[0] + u[0] * h, P0[1] + u[1] * h], P2 = [C[0] - v[0] * h, C[1] - v[1] * h];
+      const k0 = Bo[2] + (C[2] - Bo[2]) * (1 - l / ul);
+      for (let i = 0; i < 10; i++) {
+        const t = i / 10, a0 = (1 - t) ** 3, a1 = 3 * t * (1 - t) ** 2, a2 = 3 * t * t * (1 - t), a3 = t ** 3;
+        path.push([a0 * P0[0] + a1 * P1[0] + a2 * P2[0] + a3 * C[0], a0 * P0[1] + a1 * P1[1] + a2 * P2[1] + a3 * C[1], k0 + (C[2] - k0) * t]);
+      }
+    }
   }
-  return c;
-}
-function obFilletTry(cover, ends, C, t0, arc, L, Y, tx, cap, inside, spine){
-  if (arc.length < 3 || !(L > 0)) return true;
-  const tl = Math.hypot(t0[0], t0[1]) || 1, t = [t0[0] / tl, t0[1] / tl];
-  const P0 = [C[0] - t[0] * L, C[1] - t[1] * L, C[2]];
-  // (a corner to fill only if the spine goes off to the outside of the board's line, away from the board's inside)
-  const side = q => t[0] * (q[1] - C[1]) - t[1] * (q[0] - C[0]), mid = arc[Math.min(arc.length - 1, 2)];
-  if (!(side(mid) * side(inside) < 0)) return true;
-  let j = 1, run = 0;
-  for (; j < arc.length - 1; j++) { run += Math.hypot(arc[j][0] - arc[j - 1][0], arc[j][1] - arc[j - 1][1]); if (run >= L) break; }
-  const Q = arc[j], tq = [arc[Math.min(arc.length - 1, j + 1)][0] - arc[j - 1][0], arc[Math.min(arc.length - 1, j + 1)][1] - arc[j - 1][1]];
-  // (the corner has to open outwards: the spine turning away from the board's line, not on along it)
-  const den = t[0] * tq[1] - t[1] * tq[0];
-  if (Math.abs(den) < 1e-9 * Math.hypot(tq[0], tq[1])) return true;
-  const s0 = ((Q[0] - P0[0]) * tq[1] - (Q[1] - P0[1]) * tq[0]) / den;
-  if (!(s0 > 1e-9)) return false;
-  const K = [P0[0] + t[0] * s0, P0[1] + t[1] * s0, C[2]];
-  const path = [P0]; for (let i = 1; i <= 12; i++) { const u = i / 12; path.push([0, 1, 2].map(q => (1 - u) * (1 - u) * P0[q] + 2 * u * (1 - u) * K[q] + u * u * Q[q])); }
-  const poly = [...path]; for (let i = j - 1; i >= 0; i--) poly.push(arc[i]);
-  if (obCrosses(poly)) return false;
-  // (nor over the end of the spine itself, where the spine's round dips past the board's line)
-  if (spine && spine.length > 2 && path.slice(1, -1).some(q => obInside(spine, q))) return false;
+  path.push(C);
+  let poly = [Bi, ...path, In];
+  if (path.length > 2 && obCrosses(poly)) { path.splice(1, path.length - 2); poly = [Bi, Bo, C, In]; }
   obCoverStrips(cover, path, tx, Y);
   obFlat(ends, poly, Y, cap);
-  return true;
-}
-/* A joint where a board lies out from the spine, closed like the board itself: the covering running taut from the
-   board's outside edge (Bo) onto the round of the spine (arc: the spine's outline at its end, from its edge C
-   outwards), so the board and the spine meet across the board's whole thickness; and its ends, at the head and the
-   tail (at y = +-Y), filled from the board's edge (inside corner Bi, outside Bo) round to the spine's edge and in to
-   the back of the leaves (In). Points are [x, z, k], k scaling their y (a board leaning as it stands up). cap(pt) is
-   where the photo of the boards' edges falls on a point of the ends; us, the column of the spine's photo for the
-   covering. */
-function obJointFill(cover, ends, Bo, Bi, C, In, arc, Y, tx, cap, toSpine){
-  // The board's outside carried on towards the spine until it meets the spine's own outline (X): the covering runs
-  // there, and the spine's round carries on from it, so the covering never spreads over the spine itself. (Where the
-  // board's line misses the spine, it runs to the spine's edge, C.) Returns where it meets the spine, the way it ran,
-  // and the spine's outline from there on outwards, for the corner there to be rounded (obFillet).
-  const t0 = toSpine || [C[0] - Bo[0], C[1] - Bo[1]], tl = Math.hypot(t0[0], t0[1]) || 1, t = [t0[0] / tl, t0[1] / tl];
-  let X = null, k = -1;
-  for (let i = 0; i < arc.length - 1 && !X; i++) {
-    const a = arc[i], b = arc[i + 1], e = [b[0] - a[0], b[1] - a[1]], den = t[0] * e[1] - t[1] * e[0];
-    if (Math.abs(den) < 1e-14) continue;
-    const sB = ((a[0] - Bo[0]) * e[1] - (a[1] - Bo[1]) * e[0]) / den, u = ((a[0] - Bo[0]) * t[1] - (a[1] - Bo[1]) * t[0]) / den;
-    if (u >= -1e-9 && u <= 1 + 1e-9 && sB >= -1e-6) { X = [Bo[0] + t[0] * Math.max(0, sB), Bo[1] + t[1] * Math.max(0, sB), (a[2] + b[2]) / 2]; k = i; }
-  }
-  let path, poly, from;
-  if (X) {
-    path = [Bo, X]; poly = [Bi, Bo, X]; for (let i = k; i >= 1; i--) poly.push(arc[i]); poly.push(C, In);
-    from = [X, ...arc.slice(k + 1)];
-  } else { path = [Bo, C]; poly = [Bi, Bo, C, In]; from = arc; }
-  if (obCrosses(poly)) { path = [Bo, C]; poly = [Bi, Bo, C, In]; from = arc; }
-  obCoverStrips(cover, path, tx, Y);
-  obFlat(ends, poly, Y, cap);
-  return {corner:from[0], dir:t, from};
 }
 /* The covering round a joint: the board's own photo (the covering runs on from the spine onto the board, and the
    board's photo is of it), a strip of it from just beside the spine, at its true size and the same way round as on the
@@ -10619,8 +10579,8 @@ function obCrosses(P){
   }
   return false;
 }
-// How far the inside corner where a board meets the spine is rounded, in the model's units.
-const obFilletR = d => Math.max(1.2 * (d.zo - d.zi), 0.016 * 2 * d.py1);
+// How long the groove in a joint is, at most, in the model's units (obJointFill).
+const obGrooveR = d => Math.max(1.2 * (d.zo - d.zi), 0.016 * 2 * d.py1);
 // The spine's outline at its end, as [x, z] in the model (from its vertices at the head), in order round it.
 function spineArc(data){
   const p = data && data.find(q => q.name === 'spine'); if (!p) return [];
@@ -10958,6 +10918,13 @@ function obBuild(gl, spec){
           break;
         }
       }
+      // (and, where the board lies lower than the spine's edge, far enough out that the covering running up from its edge
+      // to the spine's passes outside the spine's round, not through it, hiding none of it)
+      const Cs = side ? CR : CL;
+      for (const q of pts) if (q[1] > zq + 1e-9 && Cs[1] - q[1] > 1e-9) {
+        const xq = Cs[0] + (q[0] - Cs[0]) * (Cs[1] - zq) / (Cs[1] - q[1]);
+        if (sg * (xq - xB[side]) > 0) xB[side] = xq;
+      }
     }
   }
   // Where the leaves of the two sides meet: on the back of the leaves (the chord, inside the spine), as far along it as
@@ -11048,12 +11015,8 @@ function obBuild(gl, spec){
       const C = [Cc[0], Cc[1], 1], tx = {uS:side ? 0.994 : 0.006, dir:side ? -1 : 1, W:(d.xr - d.xl) * k}, jc = side ? coverR : coverL;
       if (arc.length) arc[0] = C;
       const cap = p => [sg * (p[0] - xe) / tile, Math.min(1, Math.max(0, (p[1] - ze) / Math.max(1e-6, zb - ze)))];
-      const half = arc.slice(0, Math.ceil(arc.length / 2));
-      // (the joint; and where the covering along the board's outside meets the spine at a corner, the corner rounded
-      // inside it)
-      if (Math.abs(x0 - xe) < 1e-6) obFillet(jc, ends, C, [-sg, 0], half, obFilletR(d) * k, YB, tx, cap, [xe, zb], arc);
-      else { const jf = obJointFill(jc, ends, [xe, ze, 1], [xe, zb, 1], C, [x0, zb, 1], half, YB, tx, cap, [-sg, 0]);
-        obFillet(jc, ends, jf.corner, jf.dir, jf.from, obFilletR(d) * k, YB, tx, cap, [xe, zb], arc); }
+      // (the joint, from the board's edge to the spine's; none where the board's edge is right at the spine)
+      if (Math.abs(x0 - xe) >= 1e-6) obJointFill(jc, ends, [xe, ze, 1], [xe, zb, 1], C, [x0, zb, 1], arc, YB, tx, cap, obGrooveR(d) * k);
       if (zb - Cc[1] > 1e-6) for (const [ya, yb] of [[Y, YB], [-YB, -Y]])
         obQuad(cover, [[x0, ya, Cc[1]], [x0, yb, Cc[1]], [x0, yb, zb], [x0, ya, zb]], [sg, 0, 0], [[us, 0], [us, 0], [us, 1], [us, 1]]);
       // On the inside, beyond the heads (and tails) of the leaves, the covering turned in over the end of the spine
