@@ -10915,9 +10915,22 @@ function obVert(m, p, n, uv, shade){
   return m.pos.length / 3 - 1;
 }
 // A flat four-sided face, its corners in order round it.
+// (a long narrow one, as a joint is near the ends of the book, running the book's length, is cut across into short
+// pieces: as two long triangles it came out a fraction of a pixel wide on the screen, and so thin a triangle's depth
+// goes so far wrong along its length that it showed through the pages lying above it, in dashes)
 function obQuad(m, pts, n, uvs, shades){
-  const i = pts.map((p, j) => obVert(m, p, n, uvs ? uvs[j] : [0, 0], shades ? shades[j] : 1));
-  m.idx.push(i[0], i[1], i[2], i[0], i[2], i[3]);
+  const len = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]), mix = (a, b, t) => a.map((v, q) => v + (b[q] - v) * t);
+  const long = Math.max(len(pts[0], pts[3]), len(pts[1], pts[2])), wide = Math.max(len(pts[0], pts[1]), len(pts[3], pts[2]));
+  const rows = Math.min(64, Math.max(1, Math.ceil(long / Math.max(0.02, 4 * wide))));
+  const uv = j => uvs ? uvs[j] : [0, 0], sh = j => shades ? shades[j] : 1;
+  let prev = null;
+  for (let r = 0; r <= rows; r++) {
+    const t = r / rows;
+    const a = obVert(m, mix(pts[0], pts[3], t), n, mix(uv(0), uv(3), t), sh(0) + (sh(3) - sh(0)) * t);
+    const b = obVert(m, mix(pts[1], pts[2], t), n, mix(uv(1), uv(2), t), sh(1) + (sh(2) - sh(1)) * t);
+    if (prev) m.idx.push(prev[0], prev[1], b, prev[0], b, a);
+    prev = [a, b];
+  }
 }
 /* The book's shape: the parts to draw ({mesh, tex or colour}). Lying open at spread k, each side is as the book open
    at k has it. While a leaf goes over, each side is as it'll be with the leaf off it (spec: the spread each side is as,
@@ -11170,9 +11183,19 @@ function obBuild(gl, spec){
     // and far apart there, it came out lighter than the leaf that lands on it shows it, which is shaded finely)
     const gs = Math.min(Wp, 1.45 * g); for (let i = 1; i <= 10; i++) us.push(g + (gs - g) * i / 10);
     for (let i = 1; i <= 6; i++) if (gs + (Wp - gs) * i / 6 > gs + 1e-9) us.push(gs + (Wp - gs) * i / 6);
-    // (over the board it stays on the board, going down to the fold only past the board's edge)
+    // (over the board it stays on the board, going down to the fold only past the board's edge: over the board and the
+    // joint, no nearer the endpaper pasted there than the leaves under it keep it, or a few leaves' thickness for a thick
+    // stack, as it curves down; near the ends of the book, where the stack is thin, it came so near the endpaper that the
+    // two couldn't be told apart in depth, and the endpaper showed through it in dashes)
+    const floor = zi + Math.min(stack[side], 0.002);
     const zAt0 = u => u >= g ? top : zG + (top - zG) * Math.sqrt(Math.max(0, 1 - Math.pow(1 - u / g, 2)));
-    const zAt = u => sg * (X(u) - x0) > 0 ? Math.max(zAt0(u), zi + 0.0003) : zAt0(u);
+    const zAt = u => sg * (X(u) - x0) >= 0 ? Math.max(zAt0(u), floor) : zAt0(u);
+    // (and a point just where it passes the spine's edge, so that it doesn't cut across below the endpaper there,
+    // between a point over the joint and one in over the spine)
+    if (sg * (X(0) - x0) < 0 && sg * (X(g) - x0) > 0) {
+      let a = 0, b = g; for (let i = 0; i < 50; i++) { const m = (a + b) / 2; if (sg * (X(m) - x0) < 0) a = m; else b = m; }
+      if (!us.some(u => Math.abs(u - b) < 1e-7)) { us.push(b); us.sort((p, q) => p - q); }
+    }
     const slope = u => { const e = 1e-4; return (zAt(Math.min(Wp, u + e)) - zAt(Math.max(0, u - e))) / (2 * e); };
     const shadeAt = u => 1 - 0.3 * Math.pow(Math.max(0, 1 - u / (g * 1.4)), 2);
     rest[side] = zAt; shades[side] = shadeAt; lay[side] = u => [X(u), zAt(u)]; lus[side] = us;
@@ -11211,9 +11234,8 @@ function obBuild(gl, spec){
       between(m, y, over.map(u => [u >= Wp ? xFt : X(u), zAt(u)]), over.map(u => [botAt(u), zi]), 1, 1, side, zF);
       between(m, y, topPath, backPath, 1, 1, side, zF);
     }
-    const fe = faces.fore, fb = fe.pos.length / 3;
-    for (const [yy, zz] of [[Y, zi], [-Y, zi], [-Y, top], [Y, top]]) obVert(fe, [zF(zz), yy, zz], [sg, 0, sg * (xFb - xFt) / Math.max(1e-6, top - zi)], [(0.5 - yy) * reps, across(side, zz)], 1);
-    fe.idx.push(fb, fb + 1, fb + 2, fb, fb + 2, fb + 3);
+    const corners = [[Y, zi], [Y, top], [-Y, top], [-Y, zi]];
+    obQuad(faces.fore, corners.map(([yy, zz]) => [zF(zz), yy, zz]), [sg, 0, sg * (xFb - xFt) / Math.max(1e-6, top - zi)], corners.map(([yy, zz]) => [(0.5 - yy) * reps, across(side, zz)]));
   }
   const edgeMat = i => i >= 0 ? mat(i) : {colour:obColour(look.edges && look.edges.colour, [228, 223, 211])};
   add(faces.head, edgeMat(iGilt >= 0 ? iGilt : iEdge)); add(faces.tail, edgeMat(iEdge)); add(faces.fore, edgeMat(iEdge));
