@@ -11151,11 +11151,12 @@ function obBuild(gl, spec){
     const xFb = backPath[1][0] + sg * Wp, xFt = sg * Wp, zF = zz => xFb + (xFt - xFb) * (zz - zi) / Math.max(1e-6, top - zi);
     const botAt = u => x0 + (xFb - x0) * (u - ue) / Math.max(1e-6, Wp - ue);
     for (const [y, m] of [[Y, faces.head], [-Y, faces.tail]]) {
-      between(m, y, over.map(u => [u >= Wp ? xFt : X(u), zAt(u)]), over.map(u => [botAt(u), zi]), 0.97, 0.8, side, zF);
-      between(m, y, topPath, backPath, 0.93, 0.8, side, zF);
+      // (not shaded darker down the stack: the model's page edges aren't, and they'd darken as the cover landed)
+      between(m, y, over.map(u => [u >= Wp ? xFt : X(u), zAt(u)]), over.map(u => [botAt(u), zi]), 1, 1, side, zF);
+      between(m, y, topPath, backPath, 1, 1, side, zF);
     }
     const fe = faces.fore, fb = fe.pos.length / 3;
-    for (const [yy, zz] of [[Y, zi], [-Y, zi], [-Y, top], [Y, top]]) obVert(fe, [zF(zz), yy, zz], [sg, 0, sg * (xFb - xFt) / Math.max(1e-6, top - zi)], [(0.5 - yy) * reps, across(side, zz)], zz === zi ? 0.8 : 0.97);
+    for (const [yy, zz] of [[Y, zi], [-Y, zi], [-Y, top], [Y, top]]) obVert(fe, [zF(zz), yy, zz], [sg, 0, sg * (xFb - xFt) / Math.max(1e-6, top - zi)], [(0.5 - yy) * reps, across(side, zz)], 1);
     fe.idx.push(fb, fb + 1, fb + 2, fb, fb + 2, fb + 3);
   }
   const edgeMat = i => i >= 0 ? mat(i) : {colour:obColour(look.edges && look.edges.colour, [228, 223, 211])};
@@ -11319,11 +11320,22 @@ function obLeaf(gl, L, t, sp){
 }
 // Draws the open book in 3D over the reader, where the flat one would be (and a leaf going over, if one is). False
 // if it can't be.
+// What the open book's shape is made for: made again only when it changes.
+const obKey = (sp, t) => [sp.kL, sp.kR, sp.pL, sp.pR, t && obLeafTurn(t) ? t.dir + ':' + (t.step || 1) : '', sp.fc === undefined ? '' : sp.fc.toFixed(5), RD.n, RD.W, RD.H, RD.dpr, RD.look && RD.look.headband,
+  [sp.pL, sp.pR].map(p => { const e = RD.cache.get(p); return e ? e.pgen + ':' + e.canvas.width : '-'; }).join()].join('|');
+/* The open book at spread k made ready before a cover swings open onto it (its shape, and its pages on the graphics
+   card), so that it takes over from the model the moment the cover lies down. Made only then, it held everything up
+   for a moment just as the cover landed (the time it takes to make), and the book seemed to jolt. */
+function obPrepare(k){
+  if (!obActive() || k < 0 || k > lastSpread()) return;
+  const gl = m3Gl(), mm = RD.model && M3.cache.get(RD.model); if (!gl || !mm || !mm.data) return;
+  const sp = {kL:k, kR:k, pL:2 * k, pR:2 * k + 1}, key = obKey(sp, null);
+  if (!RD.ob || RD.ob.gl !== gl || RD.ob.key !== key) { obFree(gl); RD.ob = Object.assign(obBuild(gl, sp), {gl, key}); }
+  for (const p of [sp.pL, sp.pR]) obPage(gl, p);
+}
 function obDraw(){
   const f = m3Full(); if (!f) return false;
-  const {gl, L} = f, t = RD.turn, sp = obSpec(t);
-  const key = [sp.kL, sp.kR, sp.pL, sp.pR, t && obLeafTurn(t) ? t.dir + ':' + (t.step || 1) : '', sp.fc === undefined ? '' : sp.fc.toFixed(5), RD.n, RD.W, RD.H, RD.dpr, RD.look && RD.look.headband,
-    [sp.pL, sp.pR].map(p => { const e = RD.cache.get(p); return e ? e.pgen + ':' + e.canvas.width : '-'; }).join()].join('|');
+  const {gl, L} = f, t = RD.turn, sp = obSpec(t), key = obKey(sp, t);
   if (!RD.ob || RD.ob.gl !== gl || RD.ob.key !== key) { obFree(gl); RD.ob = Object.assign(obBuild(gl, sp), {gl, key}); }
   for (const p of [sp.pL, sp.pR]) obPage(gl, p);   // (the pages lying open kept as used)
   const st = $('readerStage').getBoundingClientRect();
@@ -12115,7 +12127,10 @@ function rdTick(now){
     else if (a.d3) t.u = u;   // (the leaf eases in and out by itself)
     else t.P = rdClamp(t, {x:a.from.x + (a.to.x - a.from.x) * e, y:a.from.y + (a.to.y - a.from.y) * e + a.lift * Math.sin(Math.PI * e)});
     if (u >= 1) {
-      if (t.kind === 'rigid' && RD.v3) drawReader();   // the model lying just so, for the reader's own drawing to take over from
+      // (the model lying just so, for the reader's own drawing to take over from; not when the open 3D book takes over
+      // straight away, just below, when it would only be drawn over at once, holding up the moment the cover lands)
+      const lands3d = t.kind === 'rigid' && a.done === 'turn' && obActive() && t.to >= 0 && t.to <= lastSpread();
+      if (t.kind === 'rigid' && RD.v3 && !lands3d) drawReader();
       RD.turn = null; more = false;
       if (a.done === 'turn' || t.kind === 'rigid') rdFinish(t);
       // a turn asked for while this one went over comes next
@@ -12165,6 +12180,7 @@ function rdRigid(from, to, done){
   const t = {kind:'rigid', dir:to > from ? 1 : -1, from, to, p:0};
   if (to >= 0 && to <= lastSpread()) RD.target = to;
   readerWant();
+  if (done === 'turn') obPrepare(to);   // (the open book it lands on, ready for it)
   rdAnimate(t, done);
 }
 /* Leafing through to where the book was left, once its cover is open: a few quick turns, the first pages one at a
