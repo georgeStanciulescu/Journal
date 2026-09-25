@@ -10702,7 +10702,11 @@ function rd3Draw(t){
   // about: so that, turned, the one takes over from the other where it lies. It moves as the board does, easing
   // in and out with it, so that it's still once the board lies down.)
   const om = (1 - Math.cos(th)) / 2, pc = (back ? -1 : 1) * (d.xr - d.xl) / 2 * (1 - om);
-  RD.rvLast = {x, y, s, dist, base:m4.mul(m4.trs([back ? d.xl : -d.xl, 0, -d.zi]), turn), pivot:[pc, 0, -d.zi * (1 - om)]};
+  // (and as deep as the open 3D book is turned about, once the board's down: the fold of its gutter, a hair under its
+  // pages, where the model's pages are the pivot; else, the book seen turned, the open book taking over from the model
+  // moved every page a little, the ones furthest out most)
+  const g3 = rd3Curve(open), zAdj = g3 ? (RD.ob.zc - g3.rest[back ? 0 : 1](g3.Wp)) * 2 * d.py1 : 0;
+  RD.rvLast = {x, y, s, dist, base:m4.mul(m4.trs([back ? d.xl : -d.xl, 0, -d.zi]), turn), pivot:[pc, 0, -d.zi * (1 - om) + zAdj * om]};
   gl.uniformMatrix4fv(L.uView, false, rvView(dist, RD.rvLast.pivot, RD.rvLast.base));
   gl.uniform1f(L.uBright, M3_REST_BRIGHT); gl.uniform1f(L.uSide, side);
   gl.uniform2f(L.uHinge, d.xl, side * d.zi); gl.uniform2f(L.uCS, Math.cos(th), Math.sin(th));
