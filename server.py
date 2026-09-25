@@ -11073,8 +11073,11 @@ function obBuild(gl, spec){
   // (across the edges, from the back board's side, 0, to the front's, 1: each point by the leaf it's on)
   const across = (side, z) => Math.min(1, Math.max(0, side ? (1 - f) * (z - base[1]) / Math.max(1e-6, stack[1]) : 1 - f * (z - base[0]) / Math.max(1e-6, stack[0])));
   // A flat face at the head or the tail (y), between two paths (lists of [x, z]) running the same way, joined up
-  // point by point once each is shared out evenly along its length.
-  const between = (m, y, top, bot, shTop, shBot, side) => {
+  // point by point once each is shared out evenly along its length. Along the leaves, the photo runs from the fold to
+  // the fore-edge of each leaf (fore(z): where the fore-edge is at that height), as the model has it from the spine
+  // to the fore-edge: the leaves fanning out further than a page's width at the bottom of the stack, it's stretched
+  // with them to their ends (measured in pages' widths, it would run off its end there and start again).
+  const between = (m, y, top, bot, shTop, shBot, side, fore) => {
     const even = (P, N) => {
       const L = [0]; for (let i = 1; i < P.length; i++) L.push(L[i - 1] + Math.hypot(P[i][0] - P[i - 1][0], P[i][1] - P[i - 1][1]));
       const tot = L[L.length - 1], out = [];
@@ -11087,7 +11090,7 @@ function obBuild(gl, spec){
       return out;
     };
     const N = 40, A = even(top, N), Bp = even(bot, N), b0 = m.pos.length / 3, sgs = side ? 1 : -1;
-    const uvOf = ([x, z]) => [Math.max(0, sgs * x) / Wp * reps, across(side, z)];
+    const uvOf = ([x, z]) => [Math.min(1, Math.max(0, sgs * x) / Math.max(1e-6, Math.abs(fore(z)))) * reps, across(side, z)];
     for (let q = 0; q <= N; q++) { obVert(m, [A[q][0], y, A[q][1]], [0, Math.sign(y), 0], uvOf(A[q]), shTop); obVert(m, [Bp[q][0], y, Bp[q][1]], [0, Math.sign(y), 0], uvOf(Bp[q]), shBot); }
     for (let q = 0; q < N; q++) { const a = b0 + 2 * q; m.idx.push(a, a + 1, a + 3, a, a + 3, a + 2); }
   };
@@ -11131,8 +11134,8 @@ function obBuild(gl, spec){
     const xFb = backPath[1][0] + sg * Wp, xFt = sg * Wp, zF = zz => xFb + (xFt - xFb) * (zz - zi) / Math.max(1e-6, top - zi);
     const botAt = u => x0 + (xFb - x0) * (u - ue) / Math.max(1e-6, Wp - ue);
     for (const [y, m] of [[Y, faces.head], [-Y, faces.tail]]) {
-      between(m, y, over.map(u => [u >= Wp ? xFt : X(u), zAt(u)]), over.map(u => [botAt(u), zi]), 0.97, 0.8, side);
-      between(m, y, topPath, backPath, 0.93, 0.8, side);
+      between(m, y, over.map(u => [u >= Wp ? xFt : X(u), zAt(u)]), over.map(u => [botAt(u), zi]), 0.97, 0.8, side, zF);
+      between(m, y, topPath, backPath, 0.93, 0.8, side, zF);
     }
     const fe = faces.fore, fb = fe.pos.length / 3;
     for (const [yy, zz] of [[Y, zi], [-Y, zi], [-Y, top], [Y, top]]) obVert(fe, [zF(zz), yy, zz], [sg, 0, sg * (xFb - xFt) / Math.max(1e-6, top - zi)], [(0.5 - yy) * reps, across(side, zz)], zz === zi ? 0.8 : 0.97);
