@@ -11456,6 +11456,10 @@ function obSpec(t){
    the top page of the other. Its two sides are drawn separately, each with its own page, each seen only from its
    own side. Made once for each turn; its shape is worked out afresh for each picture. */
 const OB_NU = 96, OB_NV = 14, OB_LIFT = 0.0025;
+// e to the minus s (s from 0 to 9), looked up rather than worked out: the leaf's shadow wants tens of thousands of
+// them for every picture as it goes over (between the entries, to within a hundred-thousandth)
+const OB_GAUSS = (() => { const a = new Float32Array(2049); for (let i = 0; i <= 2048; i++) a[i] = Math.exp(-9 * i / 2048); return a; })();
+const obGauss = s => { const f = Math.min(2048, s * (2048 / 9)), i = f | 0; return i >= 2048 ? OB_GAUSS[2048] : OB_GAUSS[i] + (OB_GAUSS[i + 1] - OB_GAUSS[i]) * (f - i); };
 function obLeaf(gl, L, t, sp){
   const ob = RD.ob, G = ob.geo, sg = t.dir > 0 ? 1 : -1, NU = OB_NU, NV = OB_NV, cols = NU + 1, rows = NV + 1;
   let lf = ob.leaf;
@@ -11474,7 +11478,9 @@ function obLeaf(gl, L, t, sp){
       const a = j * cols + i, b = a + 1, c = a + cols + 1, d = a + cols, A = [a, c, b, a, d, c], B = [a, b, c, a, c, d];
       idxF.push(...(sg > 0 ? A : B)); idxB.push(...(sg > 0 ? B : A));   // (each wound to face its own way)
     }
-    lf = ob.leaf = {sg, us, pos:new Float32Array(3 * N), nf:new Float32Array(3 * N), nb:new Float32Array(3 * N), col:new Float32Array(4 * N)};
+    lf = ob.leaf = {sg, us, pos:new Float32Array(3 * N), nf:new Float32Array(3 * N), nb:new Float32Array(3 * N), col:new Float32Array(4 * N),
+      // (how the bend goes along it, the same for every row, and the height of the pages under each point, as found)
+      bend:us.map((u, i) => i ? Math.pow((u + us[i - 1]) / 2 / G.Wp, 1.2) : 0), under:new Float32Array(N)};
     const mk = (target, data, usage) => { const b = gl.createBuffer(); ob.made.push(['Buffer', b]); gl.bindBuffer(target, b); gl.bufferData(target, data, usage); return b; };
     gl.bindVertexArray(null);
     lf.bPos = mk(gl.ARRAY_BUFFER, lf.pos, gl.DYNAMIC_DRAW); lf.bCol = mk(gl.ARRAY_BUFFER, lf.col, gl.DYNAMIC_DRAW);
@@ -11531,7 +11537,7 @@ function obLeaf(gl, L, t, sp){
     let x = 0, z = G.zG;
     for (let i = 0; i < cols; i++) {
       if (i) {
-        const ds = us[i] - us[i - 1], a = aH + (e - aH) * Math.pow((us[i] + us[i - 1]) / 2 / G.Wp, 1.2);
+        const ds = us[i] - us[i - 1], a = aH + (e - aH) * lf.bend[i];
         x += sg * Math.cos(a) * ds; z += Math.sin(a) * ds;
       }
       const o = 3 * (j * cols + i);
@@ -11544,7 +11550,8 @@ function obLeaf(gl, L, t, sp){
       let px = xx, pz = Math.max(z, surf(xx) + lift);
       if (L0) { const q = L0[i]; px += (q[0] - px) * b0; pz += (q[1] + lift - pz) * b0; }
       if (L1) { const q = L1[i]; px += (q[0] - px) * b1; pz += (q[1] + lift - pz) * b1; }
-      pos[o] = px; pos[o + 1] = y; pos[o + 2] = Math.max(pz, surf(px) + lift);
+      const sp = surf(px); lf.under[j * cols + i] = sp;
+      pos[o] = px; pos[o + 1] = y; pos[o + 2] = Math.max(pz, sp + lift);
     }
   }
   // Which way each side faces, from the shape; and its shade, in the gutter as it lies on either side.
@@ -11559,10 +11566,10 @@ function obLeaf(gl, L, t, sp){
     const a = at(i + 1, j), b = at(i - 1, j), c = at(i, j - 1), d = at(i, j + 1);
     const u0 = pos[a] - pos[b], u1 = pos[a + 1] - pos[b + 1], u2 = pos[a + 2] - pos[b + 2], y0 = pos[c] - pos[d], y1 = pos[c + 1] - pos[d + 1], y2 = pos[c + 2] - pos[d + 2];
     let n0 = u1 * y2 - u2 * y1, n1 = u2 * y0 - u0 * y2, n2 = u0 * y1 - u1 * y0;
-    const l = (Math.hypot(n0, n1, n2) || 1) * sg; n0 /= l; n1 /= l; n2 /= l;
+    const l = (Math.sqrt(n0 * n0 + n1 * n1 + n2 * n2) || 1) * sg; n0 /= l; n1 /= l; n2 /= l;
     if (F0) { const q = F0[i]; n0 += (q[0] - n0) * b0; n1 += (q[1] - n1) * b0; n2 += (q[2] - n2) * b0; }
     if (F1) { const q = F1[i]; n0 += (-q[0] - n0) * b1; n1 += (-q[1] - n1) * b1; n2 += (-q[2] - n2) * b1; }
-    const l2 = Math.hypot(n0, n1, n2) || 1; n0 /= l2; n1 /= l2; n2 /= l2;
+    const l2 = Math.sqrt(n0 * n0 + n1 * n1 + n2 * n2) || 1; n0 /= l2; n1 /= l2; n2 /= l2;
     const o = 3 * (j * cols + i);
     lf.nf[o] = n0; lf.nf[o + 1] = n1; lf.nf[o + 2] = n2; lf.nb[o] = -n0; lf.nb[o + 1] = -n1; lf.nb[o + 2] = -n2;
     const s = shade[i], oc = 4 * (j * cols + i); lf.col[oc] = lf.col[oc + 1] = lf.col[oc + 2] = s; lf.col[oc + 3] = 1;
@@ -11578,14 +11585,14 @@ function obLeaf(gl, L, t, sp){
     let sorted = true; for (let q = 1; q < sw; q++) if (sx[q] < sx[q - 1]) { sorted = false; break; }
     const dark = new Float32Array(sw), first = x => { let a = 0, b = sw; while (a < b) { const m = (a + b) >> 1; if (sx[m] < x) a = m + 1; else b = m; } return a; };
     for (let j = 0; j < rows; j++) {
-      for (let i = 0; i < cols; i++) { const o = 3 * (j * cols + i), h = Math.max(0, pos[o + 2] - surf(pos[o])); hs[i] = h; xp[i] = pos[o] + 0.35 * h; }
+      for (let i = 0; i < cols; i++) { const o = 3 * (j * cols + i), h = Math.max(0, pos[o + 2] - lf.under[j * cols + i]); hs[i] = h; xp[i] = pos[o] + 0.35 * h; }
       dark.fill(0);
       for (let i = 0; i < cols; i++) {
         const h = hs[i], sg2 = 0.012 + 0.22 * h, base = Math.exp(-h / 0.55);
         for (let q = sorted ? first(xp[i] - 3 * sg2) : 0; q < sw; q++) {
           const d = (sx[q] - xp[i]) / sg2;
           if (d >= 3) { if (sorted) break; continue; }
-          if (d > -3) { const w = base * Math.exp(-d * d); if (w > dark[q]) dark[q] = w; }
+          if (d > -3) { const w = base * obGauss(d * d); if (w > dark[q]) dark[q] = w; }
         }
       }
       for (let q = 0; q < sw; q++) { const v = Math.pow(1 - 0.45 * fadeS * dark[q], 2.2), o = 4 * (j * sw + q); lf.scol[o] = lf.scol[o + 1] = lf.scol[o + 2] = v; lf.scol[o + 3] = 1; }
